@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { parseMermaidFlowchart } from '../parser';
+import { DiagramCanvas } from './components/DiagramCanvas';
 
 const initialExample = `graph TD
   A[Начало] --> B{Условие}
@@ -10,6 +11,7 @@ const initialExample = `graph TD
 export const App: React.FC = () => {
   const [source, setSource] = useState(initialExample);
   const [error, setError] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const model = useMemo(() => {
     try {
@@ -38,7 +40,7 @@ export const App: React.FC = () => {
       }}
     >
       <h1 style={{ fontSize: '20px', fontWeight: 600 }}>
-        Прототип парсера для гибридного редактора диаграмм
+        Прототип парсера для гибридного редактора диаграмм (Добавил визуализацию)
       </h1>
 
       <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
@@ -82,14 +84,49 @@ export const App: React.FC = () => {
 
           <div
             style={{
+              flex: 1,
+              minHeight: '320px',
+            }}
+          >
+            {model ? (
+              <DiagramCanvas
+                model={model}
+                selectedNodeId={selectedNodeId ?? undefined}
+                onSelectNode={setSelectedNodeId}
+                onNodePositionChange={(id, x, y) => {
+                  // здесь позже будет вызов модуля обратной синхронизации
+                  // сейчас просто логируем, чтобы не ломать архитектуру
+                  // eslint-disable-next-line no-console
+                  console.log('node moved', { id, x, y });
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  background: '#020617',
+                  borderRadius: '8px',
+                  border: '1px solid #1f2937',
+                  padding: '12px',
+                  fontSize: '13px',
+                  color: '#9ca3af',
+                }}
+              >
+                Нет корректной модели для визуализации.
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
               background: '#020617',
               borderRadius: '8px',
               border: '1px solid #1f2937',
               padding: '12px',
-              fontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+              fontFamily:
+                'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
               fontSize: '12px',
               overflow: 'auto',
-              maxHeight: '480px',
+              maxHeight: '260px',
             }}
           >
             <pre style={{ margin: 0 }}>
