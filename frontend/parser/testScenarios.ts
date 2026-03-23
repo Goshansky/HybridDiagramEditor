@@ -1,4 +1,5 @@
 import { parseMermaidFlowchart } from './index';
+import { upsertLayoutHint } from './layoutHintSync';
 
 function assert(condition: unknown, message: string): void {
   if (!condition) {
@@ -74,5 +75,26 @@ graph RL
   const emptyModel = parseMermaidFlowchart(onlyComments);
   assert(emptyModel.nodes.length === 0, 'Expected 0 nodes for comments only');
   assert(emptyModel.edges.length === 0, 'Expected 0 edges for comments only');
+
+  const sourceWithoutHint = `
+graph TD
+A --> B
+`.trim();
+  const withNewHint = upsertLayoutHint(sourceWithoutHint, 'A', 101.6, 49.1);
+  assert(
+    withNewHint.includes('%% {"layout":{"A":{"x":102,"y":49}}}'),
+    'Expected new layout hint line',
+  );
+
+  const sourceWithHint = `
+graph TD
+A --> B
+%% {"layout":{"A":{"x":1,"y":2}}}
+`.trim();
+  const updatedHint = upsertLayoutHint(sourceWithHint, 'B', 20, 30);
+  assert(
+    updatedHint.includes('%% {"layout":{"A":{"x":1,"y":2},"B":{"x":20,"y":30}}}'),
+    'Expected existing layout hint to be updated',
+  );
 }
 

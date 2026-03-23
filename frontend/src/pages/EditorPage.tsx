@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 
-import { parseMermaidFlowchart } from '../../parser';
+import { parseMermaidFlowchart, upsertLayoutHint } from '../../parser';
 import { DiagramCanvas } from '../components/DiagramCanvas';
 import { Toolbar } from '../components/Toolbar';
 import { useAppDispatch } from '../store';
@@ -287,7 +287,11 @@ export const EditorPage: React.FC = () => {
                 selectedNodeId={selectedNodeId ?? undefined}
                 onSelectNode={setSelectedNodeId}
                 onNodePositionChange={(id, x, y) => {
-                  console.log('node moved', { id, x, y });
+                  setSource((prevSource) => {
+                    const nextSource = upsertLayoutHint(prevSource, id, x, y);
+                    return nextSource === prevSource ? prevSource : nextSource;
+                  });
+                  setStatusMessage(`Обновлен layout-хинт для узла "${id}"`);
                 }}
               />
             ) : (
