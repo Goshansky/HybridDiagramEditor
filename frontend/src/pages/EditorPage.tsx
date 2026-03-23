@@ -1,10 +1,22 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import axios from 'axios';
 
 import { parseMermaidFlowchart, upsertLayoutHint } from '../../parser';
 import { DiagramCanvas } from '../components/DiagramCanvas';
 import { Toolbar } from '../components/Toolbar';
-import { useAppDispatch } from '../store';
+import { useAppDispatch, useAppSelector } from '../store';
 import { logout } from '../store/authSlice';
+import {
+  createDiagram,
+  getDiagram,
+  listDiagrams,
+  updateDiagram,
+} from '../services/diagramApi';
+import {
+  setDiagrams,
+  setSelectedDiagramId,
+  upsertDiagram,
+} from '../store/diagramSlice';
 
 const initialExample = `graph TD
   A[Начало] --> B{Условие}
@@ -20,6 +32,10 @@ export const EditorPage: React.FC = () => {
   const [zoomType, setZoomType] = useState<'in' | 'out' | 'reset'>('reset');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dispatch = useAppDispatch();
+  const diagramItems = useAppSelector((state) => state.diagram.items);
+  const selectedDiagramId = useAppSelector(
+    (state) => state.diagram.selectedDiagramId,
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const parsed = useMemo(() => {
@@ -41,6 +57,35 @@ export const EditorPage: React.FC = () => {
     setZoomType(type);
     setZoomNonce((prev) => prev + 1);
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const loadDiagrams = async (): Promise<void> => {
+      try {
+        const diagrams = await listDiagrams();
+        if (!mounted) return;
+        dispatch(
+          setDiagrams(
+            diagrams.map((item) => ({
+              id: item.id,
+              name: item.name,
+              updatedAt: item.updated_at,
+            })),
+          ),
+        );
+      } catch (error) {
+        if (!mounted) return;
+        const message = axios.isAxiosError(error)
+          ? (error.response?.data?.detail ?? 'Не удалось загрузить список диаграмм')
+          : 'Не удалось загрузить список диаграмм';
+        setStatusMessage(message);
+      }
+    };
+    void loadDiagrams();
+    return () => {
+      mounted = false;
+    };
+  }, [dispatch]);
 
   const downloadTextFile = (filename: string, content: string): void => {
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -111,19 +156,60 @@ export const EditorPage: React.FC = () => {
     }
   };
 
-  const saveVersionLocally = (): void => {
-    localStorage.setItem('hde_last_saved_source', source);
-    setStatusMessage('Версия сохранена локально');
+  const saveVersionToServer = async (): Promise<void> => {
+    try {
+      if (selectedDiagramId === null) {
+        const enteredName = window.prompt('Название диаграммы', 'Новая диаграмма');
+        const name = enteredName?.trim();
+        if (!name) {
+          setStatusMessage('Сохранение отменено: не указано название');
+          return;
+        }
+        const created = await createDiagram({ name, content: source });
+        dispatch(
+          upsertDiagram({
+            id: created.id,
+            name: created.name,
+            updatedAt: created.updated_at,
+          }),
+        );
+        dispatch(setSelectedDiagramId(created.id));
+        setStatusMessage(`Создана диаграмма "${created.name}"`);
+        return;
+      }
+
+      const updated = await updateDiagram(selectedDiagramId, { content: source });
+      dispatch(
+        upsertDiagram({
+          id: updated.id,
+          name: updated.name,
+          updatedAt: updated.updated_at,
+        }),
+      );
+      setStatusMessage(`Диаграмма "${updated.name}" обновлена`);
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.detail ?? 'Не удалось сохранить диаграмму')
+        : 'Не удалось сохранить диаграмму';
+      setStatusMessage(message);
+    }
   };
 
-  const restoreLastVersion = (): void => {
-    const saved = localStorage.getItem('hde_last_saved_source');
-    if (!saved) {
-      setStatusMessage('Нет сохраненной версии');
+  const restoreFromServer = async (): Promise<void> => {
+    if (selectedDiagramId === null) {
+      setStatusMessage('Сначала выбери диаграмму из списка');
       return;
     }
-    setSource(saved);
-    setStatusMessage('Загружена последняя сохраненная версия');
+    try {
+      const diagram = await getDiagram(selectedDiagramId);
+      setSource(diagram.content);
+      setStatusMessage(`Загружена сохраненная версия "${diagram.name}"`);
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.detail ?? 'Не удалось загрузить диаграмму')
+        : 'Не удалось загрузить диаграмму';
+      setStatusMessage(message);
+    }
   };
 
   const openFile = (): void => {
@@ -175,6 +261,28 @@ export const EditorPage: React.FC = () => {
 
       <Toolbar
         viewType={viewType}
+        diagrams={diagramItems}
+        selectedDiagramId={selectedDiagramId}
+        onSelectDiagram={(diagramId) => {
+          dispatch(setSelectedDiagramId(diagramId));
+          if (diagramId === null) {
+            setStatusMessage('Режим новой диаграммы');
+            return;
+          }
+          void (async () => {
+            try {
+              const diagram = await getDiagram(diagramId);
+              setSource(diagram.content);
+              setStatusMessage(`Загружена диаграмма "${diagram.name}"`);
+            } catch (error) {
+              const message = axios.isAxiosError(error)
+                ? (error.response?.data?.detail ??
+                    'Не удалось открыть выбранную диаграмму')
+                : 'Не удалось открыть выбранную диаграмму';
+              setStatusMessage(message);
+            }
+          })();
+        }}
         onViewTypeChange={setViewType}
         onOpenFile={openFile}
         onSaveCode={() => {
@@ -185,8 +293,12 @@ export const EditorPage: React.FC = () => {
         onSaveImagePng={() => {
           void saveAsPng();
         }}
-        onSaveVersion={saveVersionLocally}
-        onRestoreLastVersion={restoreLastVersion}
+        onSaveVersion={() => {
+          void saveVersionToServer();
+        }}
+        onRestoreLastVersion={() => {
+          void restoreFromServer();
+        }}
       />
 
       <input

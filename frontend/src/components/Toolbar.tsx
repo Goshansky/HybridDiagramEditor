@@ -4,6 +4,9 @@ type DiagramViewType = 'flowchart' | 'class' | 'sequence';
 
 interface ToolbarProps {
   viewType: DiagramViewType;
+  diagrams: Array<{ id: number; name: string }>;
+  selectedDiagramId: number | null;
+  onSelectDiagram: (diagramId: number | null) => void;
   onViewTypeChange: (value: DiagramViewType) => void;
   onOpenFile: () => void;
   onSaveCode: () => void;
@@ -15,6 +18,9 @@ interface ToolbarProps {
 
 export const Toolbar: React.FC<ToolbarProps> = ({
   viewType,
+  diagrams,
+  selectedDiagramId,
+  onSelectDiagram,
   onViewTypeChange,
   onOpenFile,
   onSaveCode,
@@ -35,6 +41,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         background: '#020617',
       }}
     >
+      <select
+        value={selectedDiagramId ?? ''}
+        onChange={(event) => {
+          const value = event.target.value;
+          onSelectDiagram(value ? Number(value) : null);
+        }}
+        style={controlStyle}
+      >
+        <option value="">Новая диаграмма</option>
+        {diagrams.map((diagram) => (
+          <option key={diagram.id} value={diagram.id}>
+            {diagram.name}
+          </option>
+        ))}
+      </select>
       <select
         value={viewType}
         onChange={(event) => onViewTypeChange(event.target.value as DiagramViewType)}
