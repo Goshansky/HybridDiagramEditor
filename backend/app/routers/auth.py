@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.auth import create_access_token
@@ -12,7 +12,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=6, max_length=72)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_byte_length(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Пароль должен быть не длиннее 72 байт в UTF-8")
+        return value
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)

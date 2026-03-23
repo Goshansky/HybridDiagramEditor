@@ -1,11 +1,18 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=6, max_length=72)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_byte_length(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Пароль должен быть не длиннее 72 байт в UTF-8")
+        return value
 
 
 class UserRead(BaseModel):
