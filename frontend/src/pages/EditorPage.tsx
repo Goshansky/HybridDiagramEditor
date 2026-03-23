@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 
 import { parseMermaidFlowchart } from '../../parser';
 import { DiagramCanvas } from '../components/DiagramCanvas';
+import { Toolbar } from '../components/Toolbar';
 import { useAppDispatch } from '../store';
 import { logout } from '../store/authSlice';
 
@@ -14,7 +15,12 @@ const initialExample = `graph TD
 export const EditorPage: React.FC = () => {
   const [source, setSource] = useState(initialExample);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [viewType, setViewType] = useState<'flowchart' | 'class' | 'sequence'>('flowchart');
+  const [zoomNonce, setZoomNonce] = useState(0);
+  const [zoomType, setZoomType] = useState<'in' | 'out' | 'reset'>('reset');
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dispatch = useAppDispatch();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const parsed = useMemo(() => {
     try {
@@ -30,6 +36,110 @@ export const EditorPage: React.FC = () => {
       };
     }
   }, [source]);
+
+  const triggerZoom = (type: 'in' | 'out' | 'reset'): void => {
+    setZoomType(type);
+    setZoomNonce((prev) => prev + 1);
+  };
+
+  const downloadTextFile = (filename: string, content: string): void => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const getCanvasElement = (): SVGSVGElement | null =>
+    document.getElementById('diagram-canvas') as SVGSVGElement | null;
+
+  const saveAsSvg = (): void => {
+    const svgElement = getCanvasElement();
+    if (!svgElement) {
+      setStatusMessage('SVG холст не найден');
+      return;
+    }
+    const clone = svgElement.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const serializer = new XMLSerializer();
+    const svgText = serializer.serializeToString(clone);
+    downloadTextFile('diagram.svg', svgText);
+    setStatusMessage('SVG сохранен');
+  };
+
+  const saveAsPng = async (): Promise<void> => {
+    const svgElement = getCanvasElement();
+    if (!svgElement) {
+      setStatusMessage('SVG холст не найден');
+      return;
+    }
+
+    const serializer = new XMLSerializer();
+    const svgText = serializer.serializeToString(svgElement);
+    const svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+
+    try {
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = url;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = svgElement.clientWidth || 800;
+      canvas.height = svgElement.clientHeight || 600;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        setStatusMessage('Не удалось получить контекст canvas');
+        return;
+      }
+      context.fillStyle = '#020617';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const pngUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = pngUrl;
+      a.download = 'diagram.png';
+      a.click();
+      setStatusMessage('PNG сохранен');
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const saveVersionLocally = (): void => {
+    localStorage.setItem('hde_last_saved_source', source);
+    setStatusMessage('Версия сохранена локально');
+  };
+
+  const restoreLastVersion = (): void => {
+    const saved = localStorage.getItem('hde_last_saved_source');
+    if (!saved) {
+      setStatusMessage('Нет сохраненной версии');
+      return;
+    }
+    setSource(saved);
+    setStatusMessage('Загружена последняя сохраненная версия');
+  };
+
+  const openFile = (): void => {
+    fileInputRef.current?.click();
+  };
+
+  const handleOpenFile: React.ChangeEventHandler<HTMLInputElement> = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    const text = await file.text();
+    setSource(text);
+    setStatusMessage(`Файл "${file.name}" открыт`);
+    event.target.value = '';
+  };
 
   return (
     <div
@@ -63,6 +173,42 @@ export const EditorPage: React.FC = () => {
         </button>
       </div>
 
+      <Toolbar
+        viewType={viewType}
+        onViewTypeChange={setViewType}
+        onOpenFile={openFile}
+        onSaveCode={() => {
+          downloadTextFile('diagram.mmd', source);
+          setStatusMessage('Код сохранен');
+        }}
+        onSaveImageSvg={saveAsSvg}
+        onSaveImagePng={() => {
+          void saveAsPng();
+        }}
+        onSaveVersion={saveVersionLocally}
+        onRestoreLastVersion={restoreLastVersion}
+      />
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".mmd,.txt,.md"
+        style={{ display: 'none' }}
+        onChange={handleOpenFile}
+      />
+
+      {statusMessage ? (
+        <div
+          style={{
+            fontSize: 12,
+            color: '#93c5fd',
+            marginTop: -8,
+          }}
+        >
+          {statusMessage}
+        </div>
+      ) : null}
+
       <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
         <textarea
           value={source}
@@ -90,6 +236,30 @@ export const EditorPage: React.FC = () => {
             gap: '8px',
           }}
         >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>
+              Режим отображения: {viewType}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button style={zoomButtonStyle} onClick={() => triggerZoom('in')}>
+                +
+              </button>
+              <button style={zoomButtonStyle} onClick={() => triggerZoom('out')}>
+                -
+              </button>
+              <button style={zoomButtonStyle} onClick={() => triggerZoom('reset')}>
+                Сброс
+              </button>
+            </div>
+          </div>
+
           {parsed.error ? (
             <div
               style={{
@@ -112,6 +282,8 @@ export const EditorPage: React.FC = () => {
             {parsed.model ? (
               <DiagramCanvas
                 model={parsed.model}
+                canvasId="diagram-canvas"
+                zoomCommand={{ type: zoomType, nonce: zoomNonce }}
                 selectedNodeId={selectedNodeId ?? undefined}
                 onSelectNode={setSelectedNodeId}
                 onNodePositionChange={(id, x, y) => {
@@ -137,4 +309,14 @@ export const EditorPage: React.FC = () => {
       </div>
     </div>
   );
+};
+
+const zoomButtonStyle: React.CSSProperties = {
+  border: '1px solid #334155',
+  background: '#020617',
+  color: '#e5e7eb',
+  borderRadius: 6,
+  padding: '6px 10px',
+  cursor: 'pointer',
+  fontSize: 13,
 };

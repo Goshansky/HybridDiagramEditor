@@ -6,6 +6,11 @@ interface DiagramCanvasProps {
   model: DiagramModel | null;
   width?: number;
   height?: number;
+  canvasId?: string;
+  zoomCommand?: {
+    type: 'in' | 'out' | 'reset';
+    nonce: number;
+  };
   selectedNodeId?: string;
   onSelectNode?: (id: string | null) => void;
   onNodePositionChange?: (id: string, x: number, y: number) => void;
@@ -93,11 +98,15 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   model,
   width = 800,
   height = 600,
+  canvasId = 'diagram-canvas',
+  zoomCommand,
   selectedNodeId,
   onSelectNode,
   onNodePositionChange,
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const rootGroupRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const zoomInitializedRef = useRef(false);
 
   // базовая инициализация zoom/pan
@@ -111,17 +120,52 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     if (rootG.empty()) {
       rootG = svgSelection.append('g').attr('class', 'diagram-root');
     }
+    rootGroupRef.current = rootG;
 
     const zoomBehavior = d3
       .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.3, 4])
+      .filter((event) => {
+        if (event.type === 'wheel') return true;
+        if (event.type === 'mousedown') {
+          const mouseEvent = event as MouseEvent;
+          return mouseEvent.button === 2;
+        }
+        return event.type !== 'dblclick';
+      })
       .on('zoom', (event) => {
         rootG.attr('transform', event.transform.toString());
       });
 
     svgSelection.call(zoomBehavior as any);
+    zoomBehaviorRef.current = zoomBehavior;
+
+    // отключаем нативное контекстное меню, чтобы правая кнопка мыши панорамировала холст
+    svgSelection.on('contextmenu', (event) => {
+      event.preventDefault();
+    });
+
     zoomInitializedRef.current = true;
   }, []);
+
+  useEffect(() => {
+    if (!zoomCommand || !svgRef.current || !zoomBehaviorRef.current) {
+      return;
+    }
+    const svgSelection = d3.select<SVGSVGElement, unknown>(svgRef.current);
+    if (zoomCommand.type === 'in') {
+      svgSelection.transition().duration(150).call(zoomBehaviorRef.current.scaleBy as any, 1.2);
+      return;
+    }
+    if (zoomCommand.type === 'out') {
+      svgSelection.transition().duration(150).call(zoomBehaviorRef.current.scaleBy as any, 1 / 1.2);
+      return;
+    }
+    svgSelection
+      .transition()
+      .duration(150)
+      .call(zoomBehaviorRef.current.transform as any, d3.zoomIdentity);
+  }, [zoomCommand]);
 
   // основная отрисовка / обновление
   useEffect(() => {
@@ -140,6 +184,18 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     let defs = svgSelection.select<SVGDefsElement>('defs.diagram-defs');
     if (defs.empty()) {
       defs = svgSelection.append('defs').attr('class', 'diagram-defs');
+      defs
+        .append('pattern')
+        .attr('id', 'canvas-grid')
+        .attr('width', 24)
+        .attr('height', 24)
+        .attr('patternUnits', 'userSpaceOnUse')
+        .append('path')
+        .attr('d', 'M 24 0 L 0 0 0 24')
+        .attr('fill', 'none')
+        .attr('stroke', '#1f2937')
+        .attr('stroke-width', 1);
+
       defs
         .append('marker')
         .attr('id', 'edge-arrowhead')
@@ -163,6 +219,20 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     if (nodesG.empty()) {
       nodesG = rootG.append('g').attr('class', 'nodes');
     }
+
+    let gridRect = rootG.select<SVGRectElement>('rect.canvas-grid');
+    if (gridRect.empty()) {
+      gridRect = rootG
+        .insert('rect', ':first-child')
+        .attr('class', 'canvas-grid')
+        .attr('fill', 'url(#canvas-grid)')
+        .attr('pointer-events', 'none');
+    }
+    gridRect
+      .attr('x', -2000)
+      .attr('y', -2000)
+      .attr('width', 4000)
+      .attr('height', 4000);
 
     const layout = computeLayout(model, width, height);
 
@@ -355,6 +425,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
   return (
     <svg
+      id={canvasId}
       ref={svgRef}
       width={width}
       height={height}
