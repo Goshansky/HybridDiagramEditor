@@ -9,9 +9,13 @@
     "test:parser": "tsx parser/testScenarios.ts"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.11.2",
+    "axios": "^1.13.6",
     "d3": "^7.9.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-redux": "^9.2.0",
+    "react-router-dom": "^7.13.2"
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",
@@ -23,4 +27,3 @@
     "vite": "^6.0.0"
   }
 }
-
