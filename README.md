@@ -12,7 +12,9 @@
   - защищенный роут (`ProtectedRoute`)
   - auth-state на Redux Toolkit
   - axios interceptor с автоподстановкой `Bearer` токена
-  - базовый экран редактора (прототип парсинга/визуализации)
+  - экран редактора (textarea + SVG canvas)
+  - парсер Mermaid для подмножества flowchart
+  - визуализация на D3 с zoom/pan и drag узлов
 - `postgres` в Docker Compose
 
 ## Быстрый запуск
@@ -26,6 +28,19 @@ docker compose up --build
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8000`
 - Healthcheck backend: `http://localhost:8000/health`
+
+## Что уже умеет редактор
+
+- Поддерживаемый синтаксис:
+  - `graph TD|LR|BT|RL`
+  - узлы: `A[Текст]`, `B{Текст}`, `C((Текст))`
+  - связи: `-->`, `---`, метки `|Да|`
+  - стили узлов: `style A fill:#...,stroke:#...`
+  - layout-хинт: `%% { "layout": { ... } }`
+- Поддерживается как однострочный, так и многострочный JSON layout-хинта в `%%`.
+- Обновление рендера стабилизировано:
+  - корректное обновление формы и текста узлов при правке source;
+  - для `-->` рендерится arrowhead, для `---` обычная линия.
 
 ## Backend API
 
@@ -70,3 +85,4 @@ alembic upgrade head
 
 - Для совместимости `passlib` зафиксирован `bcrypt==4.0.1`.
 - Пароль ограничен до `72` байт UTF-8 (ограничение bcrypt), поэтому валидация есть и на backend, и на frontend.
+- В текущей версии используется `textarea`; интеграция `CodeMirror` и полноценный toolbar запланированы в следующих этапах.
