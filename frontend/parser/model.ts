@@ -28,13 +28,14 @@ export interface DiagramEdgeModel {
 }
 
 export interface DiagramMetadata {
-  direction: 'TD' | 'LR';
+  direction: 'TD' | 'LR' | 'BT' | 'RL';
   scale?: number;
 }
 
 export interface DiagramModel {
   nodes: DiagramNodeModel[];
   edges: DiagramEdgeModel[];
+  layout: Record<string, { x: number; y: number }>;
   metadata: DiagramMetadata;
 }
 
@@ -42,7 +43,8 @@ export function buildDiagramModel(ast: DiagramAst): DiagramModel {
   const nodes = new Map<string, DiagramNodeModel>();
   const edges: DiagramEdgeModel[] = [];
 
-  const direction: 'TD' | 'LR' = ast.graph?.direction ?? 'TD';
+  const direction: 'TD' | 'LR' | 'BT' | 'RL' = ast.graph?.direction ?? 'TD';
+  const layout: Record<string, { x: number; y: number }> = {};
 
   const ensureNode = (
     id: string,
@@ -83,6 +85,7 @@ export function buildDiagramModel(ast: DiagramAst): DiagramModel {
         const node = ensureNode(nodeId);
         node.x = x;
         node.y = y;
+        layout[nodeId] = { x, y };
       } else {
         // некорректные координаты – игнорируем
         // eslint-disable-next-line no-console
@@ -119,6 +122,7 @@ export function buildDiagramModel(ast: DiagramAst): DiagramModel {
   return {
     nodes: Array.from(nodes.values()),
     edges,
+    layout,
     metadata: {
       direction,
     },

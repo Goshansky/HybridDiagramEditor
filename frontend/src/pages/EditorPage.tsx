@@ -13,19 +13,21 @@ const initialExample = `graph TD
 
 export const EditorPage: React.FC = () => {
   const [source, setSource] = useState(initialExample);
-  const [error, setError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const dispatch = useAppDispatch();
 
-  const model = useMemo(() => {
+  const parsed = useMemo(() => {
     try {
-      const result = parseMermaidFlowchart(source);
-      setError(null);
-      return result;
+      return {
+        model: parseMermaidFlowchart(source),
+        error: null as string | null,
+      };
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Неизвестная ошибка парсера';
-      setError(msg);
-      return null;
+      return {
+        model: null,
+        error: msg,
+      };
     }
   }, [source]);
 
@@ -88,7 +90,7 @@ export const EditorPage: React.FC = () => {
             gap: '8px',
           }}
         >
-          {error ? (
+          {parsed.error ? (
             <div
               style={{
                 background: '#7f1d1d',
@@ -97,7 +99,7 @@ export const EditorPage: React.FC = () => {
                 fontSize: '13px',
               }}
             >
-              <strong>Parse error:</strong> {error}
+              <strong>Parse error:</strong> {parsed.error}
             </div>
           ) : null}
 
@@ -107,9 +109,9 @@ export const EditorPage: React.FC = () => {
               minHeight: '320px',
             }}
           >
-            {model ? (
+            {parsed.model ? (
               <DiagramCanvas
-                model={model}
+                model={parsed.model}
                 selectedNodeId={selectedNodeId ?? undefined}
                 onSelectNode={setSelectedNodeId}
                 onNodePositionChange={(id, x, y) => {

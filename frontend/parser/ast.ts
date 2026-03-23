@@ -1,4 +1,4 @@
-export type Direction = 'TD' | 'LR';
+export type Direction = 'TD' | 'LR' | 'BT' | 'RL';
 
 export interface Position {
   line: number;
@@ -10,7 +10,7 @@ export interface Range {
   end: Position;
 }
 
-export type NodeShape = 'rect' | 'round' | 'diamond';
+export type NodeShape = 'rect' | 'circle' | 'diamond';
 
 export interface ParsedNode {
   id: string;

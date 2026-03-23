@@ -90,7 +90,7 @@ export class Parser {
 
     return {
       type: 'Graph',
-      direction: (directionToken.value ?? 'TD') as 'TD' | 'LR',
+      direction: (directionToken.value ?? 'TD') as 'TD' | 'LR' | 'BT' | 'RL',
       range,
     };
   }
@@ -189,31 +189,54 @@ export class Parser {
     const trimmed = text.trim();
 
     if (trimmed.startsWith('{')) {
-      try {
-        const parsed = JSON.parse(trimmed) as {
-          layout?: Record<string, LayoutHintData>;
-        };
-        if (parsed && typeof parsed === 'object' && parsed.layout) {
-          const ast: LayoutHintAst = {
-            type: 'LayoutHint',
-            raw: trimmed,
-            layout: parsed.layout,
-            range: makeRange(commentToken.start, commentToken.end),
+      let rawJson = trimmed;
+      let end = commentToken.end;
+      let lastError: unknown = null;
+
+      // Поддержка многострочного JSON, когда каждая строка идет с префиксом "%%".
+      while (true) {
+        try {
+          const parsed = JSON.parse(rawJson) as {
+            layout?: Record<string, LayoutHintData>;
           };
-          return ast;
+          if (parsed && typeof parsed === 'object' && parsed.layout) {
+            const ast: LayoutHintAst = {
+              type: 'LayoutHint',
+              raw: rawJson,
+              layout: parsed.layout,
+              range: makeRange(commentToken.start, end),
+            };
+            return ast;
+          }
+          break;
+        } catch (e) {
+          lastError = e;
         }
-        // no layout key – treat as plain comment
-      } catch (e) {
-        const ast: LayoutHintAst = {
-          type: 'LayoutHint',
-          raw: trimmed,
-          layout: null,
-          error: e instanceof Error ? e.message : 'Unknown JSON error',
-          range: makeRange(commentToken.start, commentToken.end),
-        };
-        // layout с ошибкой – вернём хинт, builder решит, что с ним делать
-        return ast;
+
+        if (!this.check('NEWLINE')) {
+          break;
+        }
+        this.advance();
+        if (!this.check('COMMENT')) {
+          // если после перевода строки не комментарий, откатываемся на один токен назад
+          this.current -= 1;
+          break;
+        }
+
+        const nextComment = this.advance();
+        const nextTrimmed = (nextComment.value ?? '').trim();
+        rawJson += `\n${nextTrimmed}`;
+        end = nextComment.end;
       }
+
+      const ast: LayoutHintAst = {
+        type: 'LayoutHint',
+        raw: rawJson,
+        layout: null,
+        error: lastError instanceof Error ? lastError.message : 'Unknown JSON error',
+        range: makeRange(commentToken.start, end),
+      };
+      return ast;
     }
 
     return {

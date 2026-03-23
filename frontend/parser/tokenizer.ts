@@ -8,7 +8,7 @@ export type TokenType =
   | 'ARROW' // -->
   | 'LINE' // ---
   | 'EDGE_LABEL' // |text|
-  | 'NODE_SHAPE_TEXT' // [Text], (Text), {Text}
+  | 'NODE_SHAPE_TEXT' // [Text], ((Text)), {Text}
   | 'COMMENT'
   | 'NEWLINE'
   | 'EOF';
@@ -86,8 +86,8 @@ export class Lexer {
         }
       }
 
-      // Node shapes: [Text], (Text), {Text}
-      if (ch === '[' || ch === '(' || ch === '{') {
+      // Node shapes: [Text], ((Text)), {Text}
+      if (ch === '[' || ch === '{' || (ch === '(' && this.peekNext() === '(')) {
         tokens.push(this.readNodeShapeText());
         continue;
       }
@@ -239,19 +239,31 @@ export class Lexer {
     const opener = this.peek();
     const start = this.currentPosition();
     const startOffset = this.index;
-    const shape: NodeShape =
-      opener === '[' ? 'rect' : opener === '(' ? 'round' : 'diamond';
-    const expectedCloser = opener === '[' ? ']' : opener === '(' ? ')' : '}';
+    const isDoubleParen = opener === '(' && this.peekNext() === '(';
+    const shape: NodeShape = opener === '[' ? 'rect' : opener === '{' ? 'diamond' : 'circle';
+    const expectedCloser = opener === '[' ? ']' : opener === '{' ? '}' : ')';
 
-    // consume opener
+    // consume opener(s)
     this.advance();
+    if (isDoubleParen) {
+      this.advance();
+    }
 
     let text = '';
-    while (!this.isAtEnd() && this.peek() !== expectedCloser && this.peek() !== '\n') {
+    while (!this.isAtEnd() && this.peek() !== '\n') {
+      if (shape === 'circle' && this.peek() === ')' && this.peekNext() === ')') {
+        break;
+      }
+      if (shape !== 'circle' && this.peek() === expectedCloser) {
+        break;
+      }
       text += this.advance();
     }
 
-    if (this.peek() === expectedCloser) {
+    if (shape === 'circle' && this.peek() === ')' && this.peekNext() === ')') {
+      this.advance();
+      this.advance();
+    } else if (this.peek() === expectedCloser) {
       this.advance();
     }
 
@@ -297,7 +309,7 @@ export class Lexer {
     } else if (lower === 'style') {
       type = 'STYLE';
       value = text;
-    } else if (text === 'TD' || text === 'LR') {
+    } else if (text === 'TD' || text === 'LR' || text === 'BT' || text === 'RL') {
       type = 'DIRECTION';
       value = text as Direction;
     }

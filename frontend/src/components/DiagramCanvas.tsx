@@ -11,7 +11,7 @@ interface DiagramCanvasProps {
   onNodePositionChange?: (id: string, x: number, y: number) => void;
 }
 
-type NodeShape = 'rect' | 'round' | 'diamond';
+type NodeShape = 'rect' | 'circle' | 'diamond';
 
 interface PositionedNode {
   id: string;
@@ -28,6 +28,8 @@ interface PositionedEdge {
   label?: string;
   type: 'arrow' | 'line';
   styles: Record<string, string>;
+  fromShape: NodeShape;
+  toShape: NodeShape;
   fromX: number;
   fromY: number;
   toX: number;
@@ -134,6 +136,24 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       rootG = svgSelection.append('g').attr('class', 'diagram-root');
     }
 
+    // defs/marker создаем один раз и переиспользуем при последующих рендерах
+    let defs = svgSelection.select<SVGDefsElement>('defs.diagram-defs');
+    if (defs.empty()) {
+      defs = svgSelection.append('defs').attr('class', 'diagram-defs');
+      defs
+        .append('marker')
+        .attr('id', 'edge-arrowhead')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 10)
+        .attr('refY', 0)
+        .attr('markerWidth', 6)
+        .attr('markerHeight', 6)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-5L10,0L0,5')
+        .attr('fill', '#9ca3af');
+    }
+
     let edgesG = rootG.select<SVGGElement>('g.edges');
     if (edgesG.empty()) {
       edgesG = rootG.append('g').attr('class', 'edges');
@@ -172,6 +192,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         label: e.label,
         type: e.type,
         styles: e.styles ?? {},
+        fromShape: from?.shape ?? 'rect',
+        toShape: to?.shape ?? 'rect',
         fromX,
         fromY,
         toX,
@@ -184,12 +206,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .selectAll<SVGGElement, PositionedEdge>('g.edge')
       .data(
         positionedEdges,
-        (d: PositionedEdge | d3.DefaultArcObject | undefined) =>
-          (d as PositionedEdge | undefined)?.from +
-          '-' +
-          (d as PositionedEdge | undefined)?.to +
-          '-' +
-          ((d as PositionedEdge | undefined)?.label ?? ''),
+        (d) => `${d?.from ?? ''}-${d?.to ?? ''}-${d?.label ?? ''}`,
       );
 
     const edgeEnter = edgeSelection
@@ -211,7 +228,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .style('font-size', '11px')
       .style('fill', '#e5e7eb');
 
-    const edgeMerge = edgeEnter.merge(edgeSelection as any);
+    const edgeMerge = edgeEnter.merge(edgeSelection);
 
     edgeMerge.select<SVGLineElement>('line.edge-line').attr('x1', (d) => {
       const { x1 } = computeEdgeEndpoints(d);
@@ -228,7 +245,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .attr('y2', (d) => {
         const { y2 } = computeEdgeEndpoints(d);
         return y2;
-      });
+      })
+      .attr('marker-end', (d) =>
+        d.type === 'arrow' ? 'url(#edge-arrowhead)' : null,
+      );
 
     edgeMerge
       .select<SVGTextElement>('text.edge-label')
@@ -241,7 +261,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     // --- nodes data join ---
     const nodeSelection = nodesG
       .selectAll<SVGGElement, PositionedNode>('g.node')
-      .data(positionedNodes, (d: PositionedNode | undefined) => d?.id ?? '');
+      .data<PositionedNode>(positionedNodes, (d) => d.id);
 
     const nodeEnter = nodeSelection
       .enter()
@@ -249,51 +269,51 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .attr('class', 'node')
       .style('cursor', 'pointer');
 
-    nodeEnter.each(function (d) {
-      const g = d3.select<SVGGElement, PositionedNode>(this);
+    nodeEnter
+      .append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .style('font-size', '12px')
+      .style('fill', '#e5e7eb');
 
-      const baseStroke = '#1f2937';
-      const baseFill = '#0f172a';
+    const nodeMerge = nodeEnter.merge(nodeSelection);
+
+    // Узел должен обновляться при каждом рендере, иначе форма/текст "залипают".
+    nodeMerge.each(function (d) {
+      const g = d3.select<SVGGElement, PositionedNode>(this);
+      g.selectAll<SVGRectElement | SVGPolygonElement | SVGCircleElement, PositionedNode>(
+        'rect,polygon,circle',
+      ).remove();
 
       if (d.shape === 'diamond') {
         const w = NODE_WIDTH;
         const h = NODE_HEIGHT;
-        g.append('polygon')
+        g.insert('polygon', 'text')
           .attr(
             'points',
             `0,${-h / 2} ${w / 2},0 0,${h / 2} ${-w / 2},0`,
-          )
-          .attr('fill', baseFill)
-          .attr('stroke', baseStroke)
-          .attr('stroke-width', 1.5);
+          );
+      } else if (d.shape === 'circle') {
+        g.insert('circle', 'text').attr('r', NODE_HEIGHT / 2);
       } else {
-        const rx = d.shape === 'round' ? 18 : 6;
-        g.append('rect')
+        g.insert('rect', 'text')
           .attr('x', -NODE_WIDTH / 2)
           .attr('y', -NODE_HEIGHT / 2)
           .attr('width', NODE_WIDTH)
           .attr('height', NODE_HEIGHT)
-          .attr('rx', rx)
-          .attr('ry', rx)
-          .attr('fill', baseFill)
-          .attr('stroke', baseStroke)
-          .attr('stroke-width', 1.5);
+          .attr('rx', 6)
+          .attr('ry', 6);
       }
 
-      g.append('text')
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'central')
-        .style('font-size', '12px')
-        .style('fill', '#e5e7eb')
-        .text(d.label);
+      g.select<SVGTextElement>('text').text(d.label);
     });
-
-    const nodeMerge = nodeEnter.merge(nodeSelection as any);
 
     nodeMerge.attr('transform', (d) => `translate(${d.x},${d.y})`);
 
     nodeMerge
-      .select<SVGRectElement | SVGPolygonElement>('rect,polygon')
+      .select<SVGRectElement | SVGPolygonElement | SVGCircleElement>(
+        'rect,polygon,circle',
+      )
       .attr('fill', (d) => d.styles.fill ?? '#0f172a')
       .attr('stroke', (d) =>
         d.id === selectedNodeId ? '#f97316' : d.styles.stroke ?? '#1f2937',
@@ -360,9 +380,9 @@ function computeEdgeEndpoints(edge: PositionedEdge): {
   const dy = toY - fromY;
   const length = Math.sqrt(dx * dx + dy * dy) || 1;
 
-  // небольшой отступ от центра узла к границе
-  const padStart = NODE_WIDTH * 0.25;
-  const padEnd = NODE_WIDTH * 0.25;
+  // Отступ считаем по форме узла, чтобы наконечник стрелки не прятался под узел.
+  const padStart = getNodeRadiusAlongEdge(edge.fromShape);
+  const padEnd = getNodeRadiusAlongEdge(edge.toShape);
 
   const nx = dx / length;
   const ny = dy / length;
@@ -373,5 +393,13 @@ function computeEdgeEndpoints(edge: PositionedEdge): {
   const y2 = toY - ny * padEnd;
 
   return { x1, y1, x2, y2 };
+}
+
+function getNodeRadiusAlongEdge(shape: NodeShape): number {
+  if (shape === 'circle') {
+    return NODE_HEIGHT / 2;
+  }
+  // Для прямоугольника/ромба берем половину ширины как безопасную оценку.
+  return NODE_WIDTH / 2;
 }
 

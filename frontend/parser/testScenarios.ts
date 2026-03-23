@@ -19,12 +19,14 @@ graph TD
 
   assert(model.nodes.length === 4, 'Expected 4 nodes');
   assert(model.edges.length === 3, 'Expected 3 edges');
+  assert(model.metadata.direction === 'TD', 'Expected graph direction TD');
 
   const nodeA = model.nodes.find((n) => n.id === 'A');
   const nodeB = model.nodes.find((n) => n.id === 'B');
 
   assert(nodeA?.x === 100 && nodeA?.y === 50, 'Layout for A not applied');
   assert(nodeB?.x === 250 && nodeB?.y === 150, 'Layout for B not applied');
+  assert(model.layout.A?.x === 100 && model.layout.A?.y === 50, 'Layout map for A not applied');
 
   // синтаксическая ошибка: отсутствие узла после стрелки
   const invalidInput = `
@@ -52,6 +54,16 @@ graph LR
     typeof nodeABad?.x === 'undefined' && typeof nodeABad?.y === 'undefined',
     'Bad layout hint should be ignored',
   );
+
+  // направление RL + круглый узел ((...))
+  const rlCircleInput = `
+graph RL
+  A((Start)) --> B{Check}
+`.trim();
+  const rlModel = parseMermaidFlowchart(rlCircleInput);
+  assert(rlModel.metadata.direction === 'RL', 'Expected graph direction RL');
+  const circleNode = rlModel.nodes.find((n) => n.id === 'A');
+  assert(circleNode?.shape === 'circle', 'Expected circle shape for ((...))');
 
   // пустой ввод / только комментарии
   const onlyComments = `
