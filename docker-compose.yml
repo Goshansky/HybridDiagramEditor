@@ -24,6 +24,8 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+psycopg://hde_user:hde_password@postgres:5432/hybrid_diagram_editor
+      JWT_SECRET_KEY: dev-secret-key
+      CORS_ORIGINS: http://localhost:5173
     depends_on:
       postgres:
         condition: service_healthy
