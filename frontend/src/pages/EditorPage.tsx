@@ -1,6 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { Link2, Maximize, MoreVertical, Plus, ZoomIn, ZoomOut } from 'lucide-react';
+import {
+  BookOpen,
+  ChevronDown,
+  FolderOpen,
+  GitBranch,
+  Link2,
+  Maximize,
+  MoreVertical,
+  Plus,
+  User,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { parseMermaidByType, upsertLayoutHint } from '../../parser';
@@ -536,36 +548,82 @@ export const EditorPage: React.FC = () => {
         padding: '16px',
         gap: '16px',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
-        background: '#0f172a',
-        color: '#e5e7eb',
+        background: '#ffffff',
+        color: '#111827',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 600, margin: 0 }}>
-          Hybrid Diagram Editor
-        </h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Link to="/projects" style={topActionLinkStyle}>
-            Проекты
+      <nav
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e5e7eb',
+          borderRadius: 10,
+          padding: '12px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div
+              style={{
+                background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                padding: 8,
+                borderRadius: 8,
+              }}
+            >
+              <div
+                style={{
+                  width: 24,
+                  height: 24,
+                  background: '#ffffff',
+                  clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                }}
+              />
+            </div>
+            <span style={{ fontWeight: 600, color: '#1f2937' }}>HDE</span>
+          </div>
+
+          <Link to="/projects" style={headerButtonStyle}>
+            <FolderOpen size={16} color="#4b5563" />
+            <span style={{ fontSize: 14, fontWeight: 500, color: '#374151' }}>Проекты</span>
+            <ChevronDown size={16} color="#6b7280" />
           </Link>
-          <Link to="/profile" style={topActionLinkStyle}>
-            Профиль
+
+          <a href="#" style={headerLinkStyle}>
+            <BookOpen size={16} />
+            <span>Документация</span>
+          </a>
+
+          <a href="/versions" style={headerLinkStyle}>
+            <GitBranch size={16} />
+            <span>Версии</span>
+          </a>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Link to="/profile" style={{ ...headerButtonStyle, padding: '8px 12px' }}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 999,
+                background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <User size={18} color="#ffffff" />
+            </div>
+            <ChevronDown size={16} color="#6b7280" />
           </Link>
-          <button
-            onClick={() => dispatch(logout())}
-            style={{
-              border: '1px solid #334155',
-              background: '#020617',
-              color: '#e5e7eb',
-              borderRadius: 6,
-              padding: '8px 12px',
-              cursor: 'pointer',
-            }}
-          >
+          <button onClick={() => dispatch(logout())} style={logoutButtonStyle}>
             Выйти
           </button>
         </div>
-      </div>
+      </nav>
 
       <input
         ref={fileInputRef}
@@ -786,6 +844,27 @@ export const EditorPage: React.FC = () => {
           </div>
         </div>
       </div>
+      <div
+        style={{
+          background: '#1f2937',
+          color: '#d1d5db',
+          padding: '8px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: 12,
+          borderRadius: 10,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ color: '#4ade80' }}>● Подключено</span>
+          <span style={{ color: '#6b7280' }}>|</span>
+          <span>Последнее сохранение: 2 минуты назад</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ color: '#9ca3af' }}>Версия: v1.2</span>
+        </div>
+      </div>
       {contextMenuPos ? (
         <ContextMenu
           x={contextMenuPos.x}
@@ -852,13 +931,33 @@ const canvasIconButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
 };
 
-const topActionLinkStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  background: '#020617',
-  color: '#e5e7eb',
-  borderRadius: 6,
-  padding: '8px 12px',
+const headerButtonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '8px 16px',
+  background: '#f9fafb',
+  borderRadius: 8,
+  color: '#374151',
   textDecoration: 'none',
+};
+
+const headerLinkStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  fontSize: 14,
+  color: '#4b5563',
+  textDecoration: 'none',
+};
+
+const logoutButtonStyle: React.CSSProperties = {
+  border: '1px solid #e5e7eb',
+  background: '#ffffff',
+  color: '#374151',
+  borderRadius: 8,
+  padding: '8px 12px',
+  cursor: 'pointer',
   fontSize: 13,
 };
 
