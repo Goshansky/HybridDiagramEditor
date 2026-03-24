@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+import { Link2, Maximize, MoreVertical, Plus, ZoomIn, ZoomOut } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { parseMermaidByType, upsertLayoutHint } from '../../parser';
@@ -42,6 +43,7 @@ export const EditorPage: React.FC = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [zoomNonce, setZoomNonce] = useState(0);
   const [zoomType, setZoomType] = useState<'in' | 'out' | 'reset'>('reset');
+  const [zoomPercent, setZoomPercent] = useState(100);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
@@ -100,6 +102,13 @@ export const EditorPage: React.FC = () => {
   }, [currentDiagramType, source]);
 
   const triggerZoom = (type: 'in' | 'out' | 'reset'): void => {
+    if (type === 'in') {
+      setZoomPercent((prev) => Math.min(400, Math.round(prev * 1.2)));
+    } else if (type === 'out') {
+      setZoomPercent((prev) => Math.max(30, Math.round(prev / 1.2)));
+    } else {
+      setZoomPercent(100);
+    }
     setZoomType(type);
     setZoomNonce((prev) => prev + 1);
   };
@@ -644,7 +653,9 @@ export const EditorPage: React.FC = () => {
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px',
+            borderRadius: '8px',
+            overflow: 'hidden',
+            background: '#f3f4f6',
           }}
         >
           <div
@@ -653,21 +664,40 @@ export const EditorPage: React.FC = () => {
               justifyContent: 'space-between',
               alignItems: 'center',
               gap: 8,
+              background: '#ffffff',
+              borderBottom: '1px solid #e5e7eb',
+              padding: '8px 16px',
             }}
           >
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>
-              Режим отображения: {currentDiagramType}
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button style={zoomButtonStyle} onClick={() => triggerZoom('in')}>
-                +
-              </button>
-              <button style={zoomButtonStyle} onClick={() => triggerZoom('out')}>
-                -
-              </button>
-              <button style={zoomButtonStyle} onClick={() => triggerZoom('reset')}>
-                Сброс
-              </button>
+            <span style={{ fontSize: '14px', fontWeight: 500, color: '#374151' }}>
+              Интерактивный холст
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={canvasToolbarGroupStyle}>
+                <button style={canvasIconButtonStyle} onClick={() => triggerZoom('out')} title="Уменьшить">
+                  <ZoomOut size={16} color="#4b5563" />
+                </button>
+                <span style={{ padding: '0 8px', fontSize: 12, minWidth: 50, textAlign: 'center', color: '#4b5563', fontWeight: 500 }}>
+                  {zoomPercent}%
+                </span>
+                <button style={canvasIconButtonStyle} onClick={() => triggerZoom('in')} title="Увеличить">
+                  <ZoomIn size={16} color="#4b5563" />
+                </button>
+                <button style={canvasIconButtonStyle} onClick={() => triggerZoom('reset')} title="Вписать в экран">
+                  <Maximize size={16} color="#4b5563" />
+                </button>
+              </div>
+              <div style={canvasToolbarGroupStyle}>
+                <button style={canvasIconButtonStyle} onClick={() => beginAddNode()} title="Добавить узел">
+                  <Plus size={16} color="#4b5563" />
+                </button>
+                <button style={canvasIconButtonStyle} onClick={beginAddEdge} title="Добавить ребро">
+                  <Link2 size={16} color="#4b5563" />
+                </button>
+                <button style={canvasIconButtonStyle} title="Дополнительно">
+                  <MoreVertical size={16} color="#4b5563" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -688,6 +718,7 @@ export const EditorPage: React.FC = () => {
             style={{
               flex: 1,
               minHeight: '320px',
+              overflow: 'auto',
             }}
           >
             {parsed.model ? (
@@ -718,17 +749,40 @@ export const EditorPage: React.FC = () => {
             ) : (
               <div
                 style={{
-                  background: '#020617',
+                  background: '#ffffff',
                   borderRadius: '8px',
-                  border: '1px solid #1f2937',
+                  border: '1px solid #e5e7eb',
                   padding: '12px',
                   fontSize: '13px',
-                  color: '#9ca3af',
+                  color: '#6b7280',
                 }}
               >
                 Нет корректной модели для визуализации.
               </div>
             )}
+          </div>
+
+          <div
+            style={{
+              background: '#ffffff',
+              borderTop: '1px solid #e5e7eb',
+              padding: '8px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '12px',
+              color: '#4b5563',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>Узлов: {parsed.model?.nodes.length ?? 0}</span>
+              <span style={{ color: '#9ca3af' }}>|</span>
+              <span>Рёбер: {parsed.model?.edges.length ?? 0}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: 999, background: '#22c55e' }} />
+              <span>Автосинхронизация: Код ↔ Диаграмма</span>
+            </div>
           </div>
         </div>
       </div>
@@ -778,14 +832,24 @@ export const EditorPage: React.FC = () => {
   );
 };
 
-const zoomButtonStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  background: '#020617',
-  color: '#e5e7eb',
+const canvasToolbarGroupStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+  background: '#f3f4f6',
+  borderRadius: 8,
+  padding: 4,
+};
+
+const canvasIconButtonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: 'none',
+  background: 'transparent',
   borderRadius: 6,
-  padding: '6px 10px',
+  padding: 6,
   cursor: 'pointer',
-  fontSize: 13,
 };
 
 const topActionLinkStyle: React.CSSProperties = {

@@ -201,8 +201,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         .append('path')
         .attr('d', 'M 24 0 L 0 0 0 24')
         .attr('fill', 'none')
-        .attr('stroke', '#1f2937')
-        .attr('stroke-width', 1);
+        .attr('stroke', 'rgba(0,0,0,0.08)')
+        .attr('stroke-width', 0.8);
 
       defs
         .append('marker')
@@ -215,7 +215,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         .attr('orient', 'auto')
         .append('path')
         .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', '#9ca3af');
+        .attr('fill', '#4b5563');
     }
 
     let edgesG = rootG.select<SVGGElement>('g.edges');
@@ -295,16 +295,16 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     edgeEnter
       .append('line')
       .attr('class', 'edge-line')
-      .attr('stroke', '#9ca3af')
-      .attr('stroke-width', 1.5);
+      .attr('stroke', '#4b5563')
+      .attr('stroke-width', 2);
 
     edgeEnter
       .append('text')
       .attr('class', 'edge-label')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
-      .style('font-size', '11px')
-      .style('fill', '#e5e7eb');
+      .style('font-size', '12px')
+      .style('fill', '#374151');
 
     const edgeMerge = edgeEnter.merge(edgeSelection);
     edgeMerge.on('dblclick', (event, d) => {
@@ -391,8 +391,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .append('text')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
-      .style('font-size', '12px')
-      .style('fill', '#e5e7eb');
+      .style('font-size', '13px')
+      .style('font-weight', '500')
+      .style('fill', '#1f2937');
 
     const nodeMerge = nodeEnter.merge(nodeSelection);
 
@@ -451,9 +452,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .select<
         SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
       >('rect,polygon,circle,ellipse,path')
-      .attr('fill', (d) => d.styles.fill ?? '#0f172a')
+      .attr('fill', (d) => d.styles.fill ?? '#ffffff')
       .attr('stroke', (d) =>
-        d.id === selectedNodeId ? '#f97316' : d.styles.stroke ?? '#1f2937',
+        d.id === selectedNodeId ? '#4f46e5' : d.styles.stroke ?? '#4f46e5',
       )
       .attr('stroke-width', (d) => (d.id === selectedNodeId ? 2.5 : 1.5));
 
@@ -514,9 +515,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       style={{
         width: '100%',
         height: '100%',
-        background: '#020617',
-        borderRadius: '8px',
-        border: '1px solid #1f2937',
+        background: '#f3f4f6',
+        borderRadius: '0',
+        border: 'none',
       }}
     />
   );
