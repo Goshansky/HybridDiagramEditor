@@ -3,22 +3,46 @@ import { X, Settings, Palette, Grid3X3, FileUp, Save, Image, GitBranch, RotateCc
 import type { DiagramType } from '../services/diagramApi';
 
 interface SidePanelProps {
+  diagrams: Array<{ id: number; name: string }>;
+  selectedDiagramId: number | null;
+  versions: Array<{ id: number; versionNumber: number; createdAt: string }>;
+  selectedVersionId: number | null;
+  onSelectDiagram: (diagramId: number | null) => void;
+  onCreateDiagram: () => void;
+  onLoadVersions: () => void;
+  onSelectVersion: (versionId: number | null) => void;
+  onRestoreSelectedVersion: () => void;
   diagramType: DiagramType;
   onDiagramTypeChange: (type: DiagramType) => void;
+  onAddNode: () => void;
+  onAddEdge: () => void;
   onOpenFile: () => void;
   onSaveCode: () => void;
+  onSaveSvg: () => void;
   onSaveImage: () => void;
   onSaveVersion: () => void;
   onRestore: () => void;
-  onClose: () => void;
+  onClose?: () => void;
   isSyncing?: boolean;
 }
 
 export const SidePanel: React.FC<SidePanelProps> = ({
+  diagrams,
+  selectedDiagramId,
+  versions,
+  selectedVersionId,
+  onSelectDiagram,
+  onCreateDiagram,
+  onLoadVersions,
+  onSelectVersion,
+  onRestoreSelectedVersion,
   diagramType,
   onDiagramTypeChange,
+  onAddNode,
+  onAddEdge,
   onOpenFile,
   onSaveCode,
+  onSaveSvg,
   onSaveImage,
   onSaveVersion,
   onRestore,
@@ -44,32 +68,57 @@ export const SidePanel: React.FC<SidePanelProps> = ({
         overflowY: 'auto',
       }}
     >
-      {/* Close button */}
-      <button
-        onClick={onClose}
-        style={{
-          position: 'absolute',
-          right: '8px',
-          top: '8px',
-          padding: '4px',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          borderRadius: '4px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'background-color 0.2s',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = '#e5e7eb';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }}
-      >
-        <X size={16} color="#4b5563" />
-      </button>
+      {onClose ? (
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            right: '8px',
+            top: '8px',
+            padding: '4px',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            borderRadius: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background-color 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#e5e7eb';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }}
+        >
+          <X size={16} color="#4b5563" />
+        </button>
+      ) : null}
+
+      <div>
+        <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#374151', marginBottom: '8px' }}>
+          Диаграмма
+        </label>
+        <select
+          value={selectedDiagramId ?? ''}
+          onChange={(event) => {
+            const value = event.target.value;
+            onSelectDiagram(value ? Number(value) : null);
+          }}
+          style={selectStyle}
+        >
+          <option value="">Новая диаграмма</option>
+          {diagrams.map((diagram) => (
+            <option key={diagram.id} value={diagram.id}>
+              {diagram.name}
+            </option>
+          ))}
+        </select>
+        <button style={{ ...actionButtonStyle, marginTop: '8px' }} onClick={onCreateDiagram}>
+          Создать новую диаграмму
+        </button>
+      </div>
 
       {/* Diagram Type Selector */}
       <div>
@@ -104,6 +153,36 @@ export const SidePanel: React.FC<SidePanelProps> = ({
           <option value="class">Диаграмма классов</option>
           <option value="er">ER-диаграмма</option>
         </select>
+      </div>
+
+      <div>
+        <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#374151', marginBottom: '8px' }}>
+          Версии
+        </label>
+        <select
+          value={selectedVersionId ?? ''}
+          onFocus={onLoadVersions}
+          onChange={(event) => {
+            const value = event.target.value;
+            onSelectVersion(value ? Number(value) : null);
+          }}
+          style={selectStyle}
+          disabled={selectedDiagramId === null}
+        >
+          <option value="">Выбери версию</option>
+          {versions.map((version) => (
+            <option key={version.id} value={version.id}>
+              v{version.versionNumber} ({new Date(version.createdAt).toLocaleString()})
+            </option>
+          ))}
+        </select>
+        <button
+          style={{ ...actionButtonStyle, marginTop: '8px' }}
+          onClick={onRestoreSelectedVersion}
+          disabled={selectedDiagramId === null || selectedVersionId === null}
+        >
+          Восстановить эту версию
+        </button>
       </div>
 
       {/* Settings */}
@@ -190,7 +269,22 @@ export const SidePanel: React.FC<SidePanelProps> = ({
           <ActionButton
             icon={<Image size={16} />}
             label="Сохранить как SVG"
+            onClick={onSaveSvg}
+          />
+          <ActionButton
+            icon={<Image size={16} />}
+            label="Сохранить как изображение"
             onClick={onSaveImage}
+          />
+          <ActionButton
+            icon={<Settings size={16} />}
+            label="Добавить узел"
+            onClick={onAddNode}
+          />
+          <ActionButton
+            icon={<Settings size={16} />}
+            label="Добавить связь"
+            onClick={onAddEdge}
           />
           <ActionButton
             icon={<GitBranch size={16} />}
@@ -244,6 +338,28 @@ export const SidePanel: React.FC<SidePanelProps> = ({
       `}</style>
     </div>
   );
+};
+
+const selectStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '8px 12px',
+  background: '#ffffff',
+  border: '1px solid #d1d5db',
+  borderRadius: '8px',
+  fontSize: '14px',
+  outline: 'none',
+  cursor: 'pointer',
+};
+
+const actionButtonStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '8px 12px',
+  border: '1px solid #d1d5db',
+  borderRadius: '8px',
+  background: '#ffffff',
+  color: '#374151',
+  fontSize: '14px',
+  cursor: 'pointer',
 };
 
 interface ActionButtonProps {

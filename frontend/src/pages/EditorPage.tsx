@@ -9,7 +9,7 @@ import { ContextMenu } from '../components/ContextMenu';
 import { DiagramCanvas } from '../components/DiagramCanvas';
 import { EdgeEditor } from '../components/EdgeEditor';
 import { NodeEditor } from '../components/NodeEditor';
-import { Toolbar } from '../components/Toolbar';
+import { SidePanel } from '../components/SidePanel';
 import { useAppDispatch, useAppSelector } from '../store';
 import { logout, setAuthUser } from '../store/authSlice';
 import {
@@ -557,52 +557,6 @@ export const EditorPage: React.FC = () => {
         </div>
       </div>
 
-      <Toolbar
-        diagrams={diagramItems}
-        selectedDiagramId={selectedDiagramId}
-        diagramType={currentDiagramType}
-        versions={versions}
-        selectedVersionId={selectedVersionId}
-        onSelectDiagram={(diagramId) => {
-          dispatch(setSelectedDiagramId(diagramId));
-          if (diagramId === null) {
-            dispatch(clearVersions());
-            setSelectedVersionId(null);
-            setStatusMessage('Режим новой диаграммы');
-            return;
-          }
-          void loadDiagramById(diagramId);
-        }}
-        onCreateDiagram={() => {
-          void handleCreateDiagram();
-        }}
-        onSelectDiagramType={handleSelectDiagramType}
-        onLoadVersions={() => {
-          void loadVersionsForCurrentDiagram();
-        }}
-        onSelectVersion={handleSelectVersion}
-        onRestoreSelectedVersion={() => {
-          void restoreSelectedVersion();
-        }}
-        onAddNode={() => beginAddNode()}
-        onAddEdge={beginAddEdge}
-        onOpenFile={openFile}
-        onSaveCode={() => {
-          downloadTextFile('diagram.mmd', source);
-          setStatusMessage('Код сохранен');
-        }}
-        onSaveImageSvg={saveAsSvg}
-        onSaveImagePng={() => {
-          void saveAsPng();
-        }}
-        onSaveVersion={() => {
-          void saveVersionToServer();
-        }}
-        onRestoreLastVersion={() => {
-          void restoreFromServer();
-        }}
-      />
-
       <input
         ref={fileInputRef}
         type="file"
@@ -624,6 +578,52 @@ export const EditorPage: React.FC = () => {
       ) : null}
 
       <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
+        <SidePanel
+          diagrams={diagramItems}
+          selectedDiagramId={selectedDiagramId}
+          versions={versions}
+          selectedVersionId={selectedVersionId}
+          onSelectDiagram={(diagramId) => {
+            dispatch(setSelectedDiagramId(diagramId));
+            if (diagramId === null) {
+              dispatch(clearVersions());
+              setSelectedVersionId(null);
+              setStatusMessage('Режим новой диаграммы');
+              return;
+            }
+            void loadDiagramById(diagramId);
+          }}
+          onCreateDiagram={() => {
+            void handleCreateDiagram();
+          }}
+          onLoadVersions={() => {
+            void loadVersionsForCurrentDiagram();
+          }}
+          onSelectVersion={handleSelectVersion}
+          onRestoreSelectedVersion={() => {
+            void restoreSelectedVersion();
+          }}
+          diagramType={currentDiagramType}
+          onDiagramTypeChange={handleSelectDiagramType}
+          onAddNode={() => beginAddNode()}
+          onAddEdge={beginAddEdge}
+          onOpenFile={openFile}
+          onSaveCode={() => {
+            downloadTextFile('diagram.mmd', source);
+            setStatusMessage('Код сохранен');
+          }}
+          onSaveSvg={saveAsSvg}
+          onSaveImage={() => {
+            void saveAsPng();
+          }}
+          onSaveVersion={() => {
+            void saveVersionToServer();
+          }}
+          onRestore={() => {
+            void restoreFromServer();
+          }}
+          isSyncing
+        />
         <textarea
           value={source}
           onChange={(e) => setSource(e.target.value)}
