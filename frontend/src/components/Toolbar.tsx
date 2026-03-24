@@ -5,7 +5,6 @@ import type { DiagramVersionItem } from '../store/diagramSlice';
 type DiagramViewType = 'flowchart' | 'class' | 'sequence';
 
 interface ToolbarProps {
-  viewType: DiagramViewType;
   diagrams: Array<{ id: number; name: string }>;
   selectedDiagramId: number | null;
   diagramType: DiagramType;
@@ -17,7 +16,8 @@ interface ToolbarProps {
   onLoadVersions: () => void;
   onSelectVersion: (versionId: number | null) => void;
   onRestoreSelectedVersion: () => void;
-  onViewTypeChange: (value: DiagramViewType) => void;
+  onAddNode: () => void;
+  onAddEdge: () => void;
   onOpenFile: () => void;
   onSaveCode: () => void;
   onSaveImageSvg: () => void;
@@ -27,7 +27,6 @@ interface ToolbarProps {
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
-  viewType,
   diagrams,
   selectedDiagramId,
   diagramType,
@@ -39,7 +38,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onLoadVersions,
   onSelectVersion,
   onRestoreSelectedVersion,
-  onViewTypeChange,
+  onAddNode,
+  onAddEdge,
   onOpenFile,
   onSaveCode,
   onSaveImageSvg,
@@ -111,15 +111,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       >
         Восстановить эту версию
       </button>
-      <select
-        value={viewType}
-        onChange={(event) => onViewTypeChange(event.target.value as DiagramViewType)}
-        style={controlStyle}
-      >
-        <option value="flowchart">Блок-схема</option>
-        <option value="class">Диаграмма классов (визуальный режим)</option>
-        <option value="sequence">Диаграмма последовательности (визуальный режим)</option>
-      </select>
+      <button style={controlStyle} onClick={onAddNode}>
+        Добавить узел
+      </button>
+      <button style={controlStyle} onClick={onAddEdge}>
+        Добавить связь
+      </button>
       <button style={controlStyle} onClick={onOpenFile}>
         Открыть файл
       </button>

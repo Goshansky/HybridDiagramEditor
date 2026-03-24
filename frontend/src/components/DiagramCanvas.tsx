@@ -15,6 +15,9 @@ interface DiagramCanvasProps {
   onSelectNode?: (id: string | null) => void;
   onNodePositionChange?: (id: string, x: number, y: number) => void;
   disableNodeDrag?: boolean;
+  onCanvasContextMenu?: (x: number, y: number) => void;
+  onNodeDoubleClick?: (id: string) => void;
+  onEdgeDoubleClick?: (edge: { from: string; to: string; label?: string; type: 'arrow' | 'line' }) => void;
 }
 
 type NodeShape = 'rect' | 'circle' | 'diamond' | 'oval' | 'parallelogram' | 'cloud';
@@ -105,6 +108,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   onSelectNode,
   onNodePositionChange,
   disableNodeDrag = false,
+  onCanvasContextMenu,
+  onNodeDoubleClick,
+  onEdgeDoubleClick,
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const rootGroupRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
@@ -301,6 +307,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .style('fill', '#e5e7eb');
 
     const edgeMerge = edgeEnter.merge(edgeSelection);
+    edgeMerge.on('dblclick', (event, d) => {
+      event.stopPropagation();
+      onEdgeDoubleClick?.({ from: d.from, to: d.to, label: d.label, type: d.type });
+    });
 
     edgeMerge.select<SVGLineElement>('line.edge-line').attr('x1', (d) => {
       const { x1 } = computeEdgeEndpoints(d);
@@ -467,19 +477,33 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         onNodePositionChange?.(d.id, d.x, d.y);
       });
 
-    nodeMerge.on('click', (event, d) => {
-      event.stopPropagation();
-      onSelectNode?.(d.id);
-    });
+    nodeMerge
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        onSelectNode?.(d.id);
+      })
+      .on('dblclick', (event, d) => {
+        event.stopPropagation();
+        onNodeDoubleClick?.(d.id);
+      })
+      .on('contextmenu', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
     if (!disableNodeDrag) {
       nodeMerge.call(dragBehavior as any);
     }
 
     // клик по фону снимает выделение
-    svgSelection.on('click', () => {
-      onSelectNode?.(null);
-    });
-  }, [model, width, height, onNodePositionChange, onSelectNode, selectedNodeId, disableNodeDrag]);
+    svgSelection
+      .on('click', () => {
+        onSelectNode?.(null);
+      })
+      .on('contextmenu', (event) => {
+        event.preventDefault();
+        onCanvasContextMenu?.(event.clientX, event.clientY);
+      });
+  }, [model, width, height, onNodePositionChange, onSelectNode, selectedNodeId, disableNodeDrag, onCanvasContextMenu, onNodeDoubleClick, onEdgeDoubleClick]);
 
   return (
     <svg

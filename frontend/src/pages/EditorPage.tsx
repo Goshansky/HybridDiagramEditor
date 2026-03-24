@@ -3,7 +3,12 @@ import axios from 'axios';
 import { Link, useLocation } from 'react-router-dom';
 
 import { parseMermaidByType, upsertLayoutHint } from '../../parser';
+import { AddEdgeDialog } from '../components/AddEdgeDialog';
+import { AddNodeDialog, type FlowNodeShape } from '../components/AddNodeDialog';
+import { ContextMenu } from '../components/ContextMenu';
 import { DiagramCanvas } from '../components/DiagramCanvas';
+import { EdgeEditor } from '../components/EdgeEditor';
+import { NodeEditor } from '../components/NodeEditor';
 import { Toolbar } from '../components/Toolbar';
 import { useAppDispatch, useAppSelector } from '../store';
 import { logout, setAuthUser } from '../store/authSlice';
@@ -34,11 +39,23 @@ const initialExample = `graph TD
 export const EditorPage: React.FC = () => {
   const [source, setSource] = useState(initialExample);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [viewType, setViewType] = useState<'flowchart' | 'class' | 'sequence'>('flowchart');
   const [zoomNonce, setZoomNonce] = useState(0);
   const [zoomType, setZoomType] = useState<'in' | 'out' | 'reset'>('reset');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const [pendingNodePos, setPendingNodePos] = useState<{ x: number; y: number } | null>(null);
+  const [showAddNodeDialog, setShowAddNodeDialog] = useState(false);
+  const [showAddEdgeDialog, setShowAddEdgeDialog] = useState(false);
+  const [edgeDraft, setEdgeDraft] = useState<{ from: string; to: string } | null>(null);
+  const [edgeAddModeFrom, setEdgeAddModeFrom] = useState<string | null>(null);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [editingEdge, setEditingEdge] = useState<{
+    from: string;
+    to: string;
+    label?: string;
+    type: 'arrow' | 'line';
+  } | null>(null);
   const dispatch = useAppDispatch();
   const diagramItems = useAppSelector((state) => state.diagram.items);
   const currentDiagramType = useAppSelector((state) => state.diagram.currentDiagramType);
@@ -407,6 +424,84 @@ export const EditorPage: React.FC = () => {
     }
   };
 
+  const beginAddNode = (at?: { x: number; y: number }): void => {
+    if (currentDiagramType !== 'flowchart') {
+      setStatusMessage('Добавление узлов через canvas пока поддерживается только для flowchart');
+      return;
+    }
+    setPendingNodePos(at ?? { x: 180, y: 140 });
+    setShowAddNodeDialog(true);
+    setContextMenuPos(null);
+  };
+
+  const beginAddEdge = (): void => {
+    if (currentDiagramType !== 'flowchart') {
+      setStatusMessage('Добавление связей через canvas пока поддерживается только для flowchart');
+      return;
+    }
+    setEdgeAddModeFrom(null);
+    setStatusMessage('Режим добавления связи: кликни узел-источник, затем узел-цель');
+    setContextMenuPos(null);
+  };
+
+  const handleCreateNode = (payload: { label: string; shape: FlowNodeShape }): void => {
+    const nextId = getNextNodeId(source);
+    const def = serializeNode(nextId, payload.label, payload.shape);
+    setSource((prev) => {
+      const withNode = `${prev.trimEnd()}\n  ${def}`;
+      const pos = pendingNodePos ?? { x: 180, y: 140 };
+      return upsertLayoutHint(withNode, nextId, pos.x, pos.y);
+    });
+    setShowAddNodeDialog(false);
+    setPendingNodePos(null);
+    setStatusMessage(`Добавлен узел "${nextId}"`);
+  };
+
+  const handleCanvasNodeSelect = (id: string | null): void => {
+    setSelectedNodeId(id);
+    if (!id) {
+      return;
+    }
+    // Edge creation mode: first click picks source, second click picks target.
+    if (edgeAddModeFrom === null) {
+      setEdgeAddModeFrom(id);
+      setStatusMessage(`Источник связи: "${id}". Теперь кликни узел-цель.`);
+      return;
+    }
+    if (edgeAddModeFrom === id) {
+      setStatusMessage('Источник и цель не должны совпадать');
+      return;
+    }
+    setEdgeDraft({ from: edgeAddModeFrom, to: id });
+    setShowAddEdgeDialog(true);
+    setEdgeAddModeFrom(null);
+  };
+
+  const handleCreateEdge = (payload: { label: string }): void => {
+    if (!edgeDraft) return;
+    const edgeLine = payload.label
+      ? `${edgeDraft.from} -->|${payload.label}| ${edgeDraft.to}`
+      : `${edgeDraft.from} --> ${edgeDraft.to}`;
+    setSource((prev) => `${prev.trimEnd()}\n  ${edgeLine}`);
+    setShowAddEdgeDialog(false);
+    setEdgeDraft(null);
+    setStatusMessage(`Добавлена связь ${edgeDraft.from} -> ${edgeDraft.to}`);
+  };
+
+  const handleNodeEditSave = (payload: { label: string; shape: FlowNodeShape }): void => {
+    if (!editingNodeId) return;
+    setSource((prev) => replaceNodeDefinition(prev, editingNodeId, payload.label, payload.shape));
+    setEditingNodeId(null);
+    setStatusMessage(`Узел "${editingNodeId}" обновлен`);
+  };
+
+  const handleEdgeEditSave = (payload: { label: string }): void => {
+    if (!editingEdge) return;
+    setSource((prev) => replaceEdgeDefinition(prev, editingEdge, payload.label));
+    setStatusMessage(`Связь ${editingEdge.from} -> ${editingEdge.to} обновлена`);
+    setEditingEdge(null);
+  };
+
   const openFile = (): void => {
     fileInputRef.current?.click();
   };
@@ -463,7 +558,6 @@ export const EditorPage: React.FC = () => {
       </div>
 
       <Toolbar
-        viewType={viewType}
         diagrams={diagramItems}
         selectedDiagramId={selectedDiagramId}
         diagramType={currentDiagramType}
@@ -490,7 +584,8 @@ export const EditorPage: React.FC = () => {
         onRestoreSelectedVersion={() => {
           void restoreSelectedVersion();
         }}
-        onViewTypeChange={setViewType}
+        onAddNode={() => beginAddNode()}
+        onAddEdge={beginAddEdge}
         onOpenFile={openFile}
         onSaveCode={() => {
           downloadTextFile('diagram.mmd', source);
@@ -564,7 +659,7 @@ export const EditorPage: React.FC = () => {
             }}
           >
             <div style={{ fontSize: 12, color: '#94a3b8' }}>
-              Режим отображения: {viewType}
+              Режим отображения: {currentDiagramType}
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
               <button style={zoomButtonStyle} onClick={() => triggerZoom('in')}>
@@ -605,7 +700,16 @@ export const EditorPage: React.FC = () => {
                 zoomCommand={{ type: zoomType, nonce: zoomNonce }}
                 disableNodeDrag={currentDiagramType === 'sequence'}
                 selectedNodeId={selectedNodeId ?? undefined}
-                onSelectNode={setSelectedNodeId}
+                onSelectNode={handleCanvasNodeSelect}
+                onCanvasContextMenu={(x, y) => setContextMenuPos({ x, y })}
+                onNodeDoubleClick={(id) => {
+                  if (currentDiagramType !== 'flowchart') return;
+                  setEditingNodeId(id);
+                }}
+                onEdgeDoubleClick={(edge) => {
+                  if (currentDiagramType !== 'flowchart') return;
+                  setEditingEdge(edge);
+                }}
                 onNodePositionChange={(id, x, y) => {
                   setSource((prevSource) => {
                     const nextSource = upsertLayoutHint(prevSource, id, x, y);
@@ -631,6 +735,48 @@ export const EditorPage: React.FC = () => {
           </div>
         </div>
       </div>
+      {contextMenuPos ? (
+        <ContextMenu
+          x={contextMenuPos.x}
+          y={contextMenuPos.y}
+          onAddNode={() => beginAddNode({ x: contextMenuPos.x - 420, y: contextMenuPos.y - 180 })}
+          onAddEdge={beginAddEdge}
+          onClose={() => setContextMenuPos(null)}
+        />
+      ) : null}
+      {showAddNodeDialog ? (
+        <AddNodeDialog
+          onCancel={() => {
+            setShowAddNodeDialog(false);
+            setPendingNodePos(null);
+          }}
+          onSubmit={handleCreateNode}
+        />
+      ) : null}
+      {showAddEdgeDialog ? (
+        <AddEdgeDialog
+          onCancel={() => {
+            setShowAddEdgeDialog(false);
+            setEdgeDraft(null);
+          }}
+          onSubmit={handleCreateEdge}
+        />
+      ) : null}
+      {editingNodeId ? (
+        <NodeEditor
+          initialLabel={findNodeLabel(parsed.model?.nodes ?? [], editingNodeId) ?? editingNodeId}
+          initialShape={(findNodeShape(parsed.model?.nodes ?? [], editingNodeId) ?? 'rect') as FlowNodeShape}
+          onCancel={() => setEditingNodeId(null)}
+          onSubmit={handleNodeEditSave}
+        />
+      ) : null}
+      {editingEdge ? (
+        <EdgeEditor
+          initialLabel={editingEdge.label ?? ''}
+          onCancel={() => setEditingEdge(null)}
+          onSubmit={handleEdgeEditSave}
+        />
+      ) : null}
     </div>
   );
 };
@@ -697,4 +843,83 @@ function normalizeDiagramType(raw: string): DiagramType | null {
     return value;
   }
   return null;
+}
+
+function getNextNodeId(source: string): string {
+  const ids = new Set<string>();
+  const regex = /\b([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[|\{|\(\(|\(\[|\[\[|\[\(|>)/g;
+  let match: RegExpExecArray | null = regex.exec(source);
+  while (match) {
+    ids.add(match[1]);
+    match = regex.exec(source);
+  }
+  let i = 1;
+  while (ids.has(`NewNode${i}`)) i += 1;
+  return `NewNode${i}`;
+}
+
+function serializeNode(id: string, label: string, shape: FlowNodeShape): string {
+  if (shape === 'diamond') return `${id}{${label}}`;
+  if (shape === 'circle') return `${id}((${label}))`;
+  if (shape === 'oval') return `${id}([${label}])`;
+  if (shape === 'parallelogram') return `${id}[[${label}]]`;
+  if (shape === 'cloud') return `${id}[(${label})]`;
+  return `${id}[${label}]`;
+}
+
+function replaceNodeDefinition(source: string, nodeId: string, label: string, shape: FlowNodeShape): string {
+  const lines = source.split(/\r?\n/);
+  const nodePattern = new RegExp(`\\b${escapeRegExp(nodeId)}\\s*(\\[[^\\]]*\\]|\\{[^}]*\\}|\\(\\([^)]*\\)\\)|\\(\\[[^\\]]*\\]\\)|\\[\\[[^\\]]*\\]\\]|\\[\\([^)]*\\)\\]|>[^\\]]*\\])`);
+  const replacement = serializeNode(nodeId, label, shape);
+  const idx = lines.findIndex((line) => nodePattern.test(line));
+  if (idx >= 0) {
+    lines[idx] = lines[idx].replace(nodePattern, replacement);
+    return lines.join('\n');
+  }
+  return `${source.trimEnd()}\n  ${replacement}`;
+}
+
+function replaceEdgeDefinition(
+  source: string,
+  edge: { from: string; to: string; label?: string; type: 'arrow' | 'line' },
+  newLabel: string,
+): string {
+  const lines = source.split(/\r?\n/);
+  const op = edge.type === 'line' ? '---' : '-->';
+  const from = escapeRegExp(edge.from);
+  const to = escapeRegExp(edge.to);
+  const linePattern = new RegExp(`\\b${from}\\b\\s*${escapeRegExp(op)}(?:\\|[^|]*\\|)?\\s*\\b${to}\\b`);
+  const replacement = newLabel ? `${edge.from} ${op}|${newLabel}| ${edge.to}` : `${edge.from} ${op} ${edge.to}`;
+  const idx = lines.findIndex((line) => linePattern.test(line));
+  if (idx >= 0) {
+    lines[idx] = replacement;
+    return lines.join('\n');
+  }
+  return `${source.trimEnd()}\n  ${replacement}`;
+}
+
+function findNodeLabel(nodes: Array<{ id: string; label: string }>, id: string): string | null {
+  return nodes.find((n) => n.id === id)?.label ?? null;
+}
+
+function findNodeShape(
+  nodes: Array<{ id: string; shape?: string }>,
+  id: string,
+): FlowNodeShape | null {
+  const shape = nodes.find((n) => n.id === id)?.shape;
+  if (
+    shape === 'rect' ||
+    shape === 'diamond' ||
+    shape === 'circle' ||
+    shape === 'oval' ||
+    shape === 'parallelogram' ||
+    shape === 'cloud'
+  ) {
+    return shape;
+  }
+  return null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
