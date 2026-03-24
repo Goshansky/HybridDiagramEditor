@@ -9,6 +9,7 @@ import { ContextMenu } from '../components/ContextMenu';
 import { DiagramCanvas } from '../components/DiagramCanvas';
 import { EdgeEditor } from '../components/EdgeEditor';
 import { NodeEditor } from '../components/NodeEditor';
+import { SidePanel } from '../components/SidePanel';
 import { Toolbar } from '../components/Toolbar';
 import { useAppDispatch, useAppSelector } from '../store';
 import { logout, setAuthUser } from '../store/authSlice';
@@ -56,6 +57,7 @@ export const EditorPage: React.FC = () => {
     label?: string;
     type: 'arrow' | 'line';
   } | null>(null);
+  const [showSidePanel, setShowSidePanel] = useState(true);
   const dispatch = useAppDispatch();
   const diagramItems = useAppSelector((state) => state.diagram.items);
   const currentDiagramType = useAppSelector((state) => state.diagram.currentDiagramType);
@@ -535,6 +537,21 @@ export const EditorPage: React.FC = () => {
           Hybrid Diagram Editor
         </h1>
         <div style={{ display: 'flex', gap: 8 }}>
+          {!showSidePanel && (
+            <button
+              onClick={() => setShowSidePanel(true)}
+              style={{
+                border: '1px solid #334155',
+                background: '#020617',
+                color: '#e5e7eb',
+                borderRadius: 6,
+                padding: '8px 12px',
+                cursor: 'pointer',
+              }}
+            >
+              Панель
+            </button>
+          )}
           <Link to="/projects" style={topActionLinkStyle}>
             Проекты
           </Link>
@@ -624,6 +641,25 @@ export const EditorPage: React.FC = () => {
       ) : null}
 
       <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
+        {showSidePanel && (
+          <SidePanel
+            diagramType={currentDiagramType}
+            onDiagramTypeChange={handleSelectDiagramType}
+            onOpenFile={openFile}
+            onSaveCode={() => {
+              downloadTextFile('diagram.mmd', source);
+              setStatusMessage('Код сохранен');
+            }}
+            onSaveImage={saveAsSvg}
+            onSaveVersion={() => {
+              void saveVersionToServer();
+            }}
+            onRestore={() => {
+              void restoreFromServer();
+            }}
+            onClose={() => setShowSidePanel(false)}
+          />
+        )}
         <textarea
           value={source}
           onChange={(e) => setSource(e.target.value)}
