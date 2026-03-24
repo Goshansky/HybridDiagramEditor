@@ -14,9 +14,10 @@ interface DiagramCanvasProps {
   selectedNodeId?: string;
   onSelectNode?: (id: string | null) => void;
   onNodePositionChange?: (id: string, x: number, y: number) => void;
+  disableNodeDrag?: boolean;
 }
 
-type NodeShape = 'rect' | 'circle' | 'diamond';
+type NodeShape = 'rect' | 'circle' | 'diamond' | 'oval' | 'parallelogram' | 'cloud';
 
 interface PositionedNode {
   id: string;
@@ -103,6 +104,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   selectedNodeId,
   onSelectNode,
   onNodePositionChange,
+  disableNodeDrag = false,
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const rootGroupRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
@@ -328,6 +330,42 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
     edgeSelection.exit().remove();
 
+    // Sequence diagram rendering (MVP): lifelines + vertical stacking of messages.
+    if (model.metadata.diagramType === 'sequence') {
+      let lifelinesG = rootG.select<SVGGElement>('g.lifelines');
+      if (lifelinesG.empty()) {
+        lifelinesG = rootG.insert('g', 'g.edges').attr('class', 'lifelines');
+      }
+      const lifeSelection = lifelinesG
+        .selectAll<SVGLineElement, PositionedNode>('line.lifeline')
+        .data(positionedNodes, (d) => d.id);
+
+      lifeSelection
+        .enter()
+        .append('line')
+        .attr('class', 'lifeline')
+        .merge(lifeSelection)
+        .attr('x1', (d) => d.x)
+        .attr('x2', (d) => d.x)
+        .attr('y1', (d) => d.y + 24)
+        .attr('y2', height - 30)
+        .attr('stroke', '#475569')
+        .attr('stroke-width', 1.2)
+        .attr('stroke-dasharray', '6,4');
+
+      lifeSelection.exit().remove();
+
+      edgeMerge
+        .select<SVGLineElement>('line.edge-line')
+        .attr('y1', (_d, i) => 130 + i * 48)
+        .attr('y2', (_d, i) => 130 + i * 48);
+      edgeMerge
+        .select<SVGTextElement>('text.edge-label')
+        .attr('y', (_d, i) => 130 + i * 48 - 10);
+    } else {
+      rootG.select<SVGGElement>('g.lifelines').remove();
+    }
+
     // --- nodes data join ---
     const nodeSelection = nodesG
       .selectAll<SVGGElement, PositionedNode>('g.node')
@@ -351,9 +389,11 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     // Узел должен обновляться при каждом рендере, иначе форма/текст "залипают".
     nodeMerge.each(function (d) {
       const g = d3.select<SVGGElement, PositionedNode>(this);
-      g.selectAll<SVGRectElement | SVGPolygonElement | SVGCircleElement, PositionedNode>(
-        'rect,polygon,circle',
-      ).remove();
+      g.selectAll<
+        SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement,
+        PositionedNode
+      >('rect,polygon,circle,ellipse,path')
+        .remove();
 
       if (d.shape === 'diamond') {
         const w = NODE_WIDTH;
@@ -365,6 +405,23 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           );
       } else if (d.shape === 'circle') {
         g.insert('circle', 'text').attr('r', NODE_HEIGHT / 2);
+      } else if (d.shape === 'oval') {
+        g.insert('ellipse', 'text').attr('rx', NODE_WIDTH / 2).attr('ry', NODE_HEIGHT / 2);
+      } else if (d.shape === 'parallelogram') {
+        const w = NODE_WIDTH;
+        const h = NODE_HEIGHT;
+        const skew = 16;
+        g.insert('polygon', 'text').attr(
+          'points',
+          `${-w / 2 + skew},${-h / 2} ${w / 2},${-h / 2} ${w / 2 - skew},${h / 2} ${-w / 2},${h / 2}`,
+        );
+      } else if (d.shape === 'cloud') {
+        g.insert('path', 'text')
+          .attr(
+            'd',
+            'M -45 -14 C -50 -28,-20 -32,-10 -20 C 0 -34,25 -32,28 -16 C 42 -22,52 -4,40 8 C 52 24,30 34,14 26 C 6 36,-18 36,-24 24 C -40 30,-56 14,-44 0 C -56 -6,-56 -20,-45 -14 Z',
+          )
+          .attr('transform', 'scale(1.2 1.1)');
       } else {
         g.insert('rect', 'text')
           .attr('x', -NODE_WIDTH / 2)
@@ -381,9 +438,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     nodeMerge.attr('transform', (d) => `translate(${d.x},${d.y})`);
 
     nodeMerge
-      .select<SVGRectElement | SVGPolygonElement | SVGCircleElement>(
-        'rect,polygon,circle',
-      )
+      .select<
+        SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
+      >('rect,polygon,circle,ellipse,path')
       .attr('fill', (d) => d.styles.fill ?? '#0f172a')
       .attr('stroke', (d) =>
         d.id === selectedNodeId ? '#f97316' : d.styles.stroke ?? '#1f2937',
@@ -410,18 +467,19 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         onNodePositionChange?.(d.id, d.x, d.y);
       });
 
-    nodeMerge
-      .on('click', (event, d) => {
-        event.stopPropagation();
-        onSelectNode?.(d.id);
-      })
-      .call(dragBehavior as any);
+    nodeMerge.on('click', (event, d) => {
+      event.stopPropagation();
+      onSelectNode?.(d.id);
+    });
+    if (!disableNodeDrag) {
+      nodeMerge.call(dragBehavior as any);
+    }
 
     // клик по фону снимает выделение
     svgSelection.on('click', () => {
       onSelectNode?.(null);
     });
-  }, [model, width, height, onNodePositionChange, onSelectNode, selectedNodeId]);
+  }, [model, width, height, onNodePositionChange, onSelectNode, selectedNodeId, disableNodeDrag]);
 
   return (
     <svg

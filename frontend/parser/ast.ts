@@ -10,7 +10,13 @@ export interface Range {
   end: Position;
 }
 
-export type NodeShape = 'rect' | 'circle' | 'diamond';
+export type NodeShape =
+  | 'rect'
+  | 'circle'
+  | 'diamond'
+  | 'oval'
+  | 'parallelogram'
+  | 'cloud';
 
 export interface ParsedNode {
   id: string;

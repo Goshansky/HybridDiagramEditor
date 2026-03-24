@@ -16,8 +16,12 @@
   - auth-state на Redux Toolkit
   - axios interceptor с автоподстановкой `Bearer` токена
   - экран редактора (2 колонки: source + canvas)
-  - парсер Mermaid для подмножества flowchart
-  - визуализация на D3 с zoom/pan и drag узлов
+  - парсеры Mermaid по типам диаграмм (factory):
+    - `flowchart` (основной)
+    - `classDiagram` (MVP)
+    - `sequenceDiagram` (MVP)
+    - `erDiagram` (MVP)
+  - визуализация на D3 с zoom/pan и drag узлов (для `sequence` drag отключен)
   - toolbar:
     - открыть файл, сохранить код, экспорт SVG/PNG
     - выбрать проект, создать новую диаграмму (`name + type`)
@@ -63,7 +67,13 @@ docker compose up --build
 
 - Поддерживаемый синтаксис:
   - `graph TD|LR|BT|RL`
-  - узлы: `A[Текст]`, `B{Текст}`, `C((Текст))`
+  - узлы:
+    - `A[Текст]` — прямоугольник
+    - `B{Текст}` — ромб
+    - `C((Текст))` — круг
+    - `D([Текст])` — овал
+    - `E[[Текст]]` — параллелограмм
+    - `F[(Текст)]` или `>Текст]` — облако (MVP)
   - связи: `-->`, `---`, метки `|Да|`
   - стили узлов: `style A fill:#...,stroke:#...`
   - layout-хинт: `%% { "layout": { ... } }`
@@ -90,6 +100,11 @@ docker compose up --build
   - `Тип диаграммы` (flowchart/class/sequence/er) с опциональной подстановкой шаблона;
   - `Версии` (загрузка списка `/diagrams/{id}/versions` при открытии селектора);
   - `Восстановить эту версию` (создает новую текущую версию из выбранной).
+- Для типов диаграмм:
+  - `flowchart` — полноценный существующий режим с drag + layout-hints;
+  - `class` — MVP парсинг классов и связей, рендер как узлы/связи;
+  - `sequence` — MVP рендер участников/сообщений, без drag;
+  - `er` — MVP парсинг сущностей/связей, рендер как узлы/линии.
 - Список диаграмм:
   - в toolbar есть dropdown с диаграммами пользователя;
   - при выборе диаграммы её content загружается в редактор;
@@ -164,12 +179,28 @@ alembic upgrade head
   - добавлены `currentDiagramType`, `projects`, `versions`
   - добавлены экшены `setProjects`, `upsertProject`, `removeProject`, `setVersions`, `clearVersions`, `setCurrentDiagramType`
 
+### Архитектура парсера
+
+- `parser/index.ts`:
+  - `parseMermaidByType(source, diagramType)` — фабрика парсинга
+- `parser/flowchart.ts`:
+  - flowchart parser через текущий AST/model пайплайн
+- `parser/classDiagram.ts`:
+  - MVP parser для классов и базовых отношений
+- `parser/sequence.ts`:
+  - MVP parser для `participant` и сообщений
+- `parser/erDiagram.ts`:
+  - MVP parser для сущностей и связей ER
+- `parser/layoutHints.ts`:
+  - извлечение layout-хинтов из комментариев `%% { "layout": ... }`
+
 ### Текущие ограничения
 
 - Вместо `CodeMirror` пока используется `textarea`.
-- Выбор типа диаграммы в toolbar (`flowchart/class/sequence`) пока влияет только на визуальный режим интерфейса, без отдельного парсинга class/sequence.
+- Парсинг/рендер `class`, `sequence`, `er` пока MVP-уровня (не полный Mermaid grammar).
 - Для создания диаграммы и выбора типа пока используются `prompt/confirm`; кастомные модальные окна еще не внедрены.
 - В dropdown версий пока нет явной визуальной метки "текущая версия".
+- Обратная синхронизация layout-хинтов полностью отлажена для flowchart; для `class/er` есть базовая поддержка чтения координат (запись/round-trip будет дорабатываться), `sequence` работает без drag.
 
 ### Сценарий авторизации
 

@@ -86,8 +86,16 @@ export class Lexer {
         }
       }
 
-      // Node shapes: [Text], ((Text)), {Text}
-      if (ch === '[' || ch === '{' || (ch === '(' && this.peekNext() === '(')) {
+      // Node shapes: [Text], ((Text)), {Text}, ([Text]), [[Text]], [(Text)], >Text]
+      if (
+        ch === '[' ||
+        ch === '{' ||
+        (ch === '(' && this.peekNext() === '(') ||
+        (ch === '(' && this.peekNext() === '[') ||
+        (ch === '[' && this.peekNext() === '[') ||
+        (ch === '[' && this.peekNext() === '(') ||
+        ch === '>'
+      ) {
         tokens.push(this.readNodeShapeText());
         continue;
       }
@@ -239,32 +247,71 @@ export class Lexer {
     const opener = this.peek();
     const start = this.currentPosition();
     const startOffset = this.index;
-    const isDoubleParen = opener === '(' && this.peekNext() === '(';
-    const shape: NodeShape = opener === '[' ? 'rect' : opener === '{' ? 'diamond' : 'circle';
-    const expectedCloser = opener === '[' ? ']' : opener === '{' ? '}' : ')';
-
-    // consume opener(s)
-    this.advance();
-    if (isDoubleParen) {
-      this.advance();
-    }
-
+    let shape: NodeShape = 'rect';
     let text = '';
-    while (!this.isAtEnd() && this.peek() !== '\n') {
-      if (shape === 'circle' && this.peek() === ')' && this.peekNext() === ')') {
-        break;
-      }
-      if (shape !== 'circle' && this.peek() === expectedCloser) {
-        break;
-      }
-      text += this.advance();
-    }
 
-    if (shape === 'circle' && this.peek() === ')' && this.peekNext() === ')') {
+    // Circle: ((Text))
+    if (opener === '(' && this.peekNext() === '(') {
+      shape = 'circle';
       this.advance();
       this.advance();
-    } else if (this.peek() === expectedCloser) {
+      while (!this.isAtEnd() && this.peek() !== '\n') {
+        if (this.peek() === ')' && this.peekNext() === ')') break;
+        text += this.advance();
+      }
+      if (this.peek() === ')' && this.peekNext() === ')') {
+        this.advance();
+        this.advance();
+      }
+    } else if (opener === '(' && this.peekNext() === '[') {
+      // Oval: ([Text])
+      shape = 'oval';
       this.advance();
+      this.advance();
+      while (!this.isAtEnd() && this.peek() !== '\n' && this.peek() !== ']') {
+        text += this.advance();
+      }
+      if (this.peek() === ']') this.advance();
+      if (this.peek() === ')') this.advance();
+    } else if (opener === '[' && this.peekNext() === '[') {
+      // Parallelogram: [[Text]]
+      shape = 'parallelogram';
+      this.advance();
+      this.advance();
+      while (!this.isAtEnd() && this.peek() !== '\n') {
+        if (this.peek() === ']' && this.peekNext() === ']') break;
+        text += this.advance();
+      }
+      if (this.peek() === ']' && this.peekNext() === ']') {
+        this.advance();
+        this.advance();
+      }
+    } else if (opener === '[' && this.peekNext() === '(') {
+      // Cloud: [(Text)]
+      shape = 'cloud';
+      this.advance();
+      this.advance();
+      while (!this.isAtEnd() && this.peek() !== '\n' && this.peek() !== ')') {
+        text += this.advance();
+      }
+      if (this.peek() === ')') this.advance();
+      if (this.peek() === ']') this.advance();
+    } else if (opener === '>') {
+      // Asymmetric cloud-like: >Text]
+      shape = 'cloud';
+      this.advance();
+      while (!this.isAtEnd() && this.peek() !== '\n' && this.peek() !== ']') {
+        text += this.advance();
+      }
+      if (this.peek() === ']') this.advance();
+    } else {
+      const expectedCloser = opener === '[' ? ']' : opener === '{' ? '}' : ')';
+      shape = opener === '[' ? 'rect' : opener === '{' ? 'diamond' : 'circle';
+      this.advance();
+      while (!this.isAtEnd() && this.peek() !== '\n' && this.peek() !== expectedCloser) {
+        text += this.advance();
+      }
+      if (this.peek() === expectedCloser) this.advance();
     }
 
     const end = this.currentPosition();

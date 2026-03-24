@@ -30,6 +30,7 @@ export interface DiagramEdgeModel {
 export interface DiagramMetadata {
   direction: 'TD' | 'LR' | 'BT' | 'RL';
   scale?: number;
+  diagramType?: 'flowchart' | 'class' | 'sequence' | 'er';
 }
 
 export interface DiagramModel {

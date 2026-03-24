@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Link, useLocation } from 'react-router-dom';
 
-import { parseMermaidFlowchart, upsertLayoutHint } from '../../parser';
+import { parseMermaidByType, upsertLayoutHint } from '../../parser';
 import { DiagramCanvas } from '../components/DiagramCanvas';
 import { Toolbar } from '../components/Toolbar';
 import { useAppDispatch, useAppSelector } from '../store';
@@ -69,7 +69,7 @@ export const EditorPage: React.FC = () => {
   const parsed = useMemo(() => {
     try {
       return {
-        model: parseMermaidFlowchart(source),
+        model: parseMermaidByType(source, currentDiagramType),
         error: null as string | null,
       };
     } catch (e) {
@@ -79,7 +79,7 @@ export const EditorPage: React.FC = () => {
         error: msg,
       };
     }
-  }, [source]);
+  }, [currentDiagramType, source]);
 
   const triggerZoom = (type: 'in' | 'out' | 'reset'): void => {
     setZoomType(type);
@@ -603,6 +603,7 @@ export const EditorPage: React.FC = () => {
                 model={parsed.model}
                 canvasId="diagram-canvas"
                 zoomCommand={{ type: zoomType, nonce: zoomNonce }}
+                disableNodeDrag={currentDiagramType === 'sequence'}
                 selectedNodeId={selectedNodeId ?? undefined}
                 onSelectNode={setSelectedNodeId}
                 onNodePositionChange={(id, x, y) => {
