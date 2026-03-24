@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+import { Link, useLocation } from 'react-router-dom';
 
 import { parseMermaidFlowchart, upsertLayoutHint } from '../../parser';
 import { DiagramCanvas } from '../components/DiagramCanvas';
 import { Toolbar } from '../components/Toolbar';
 import { useAppDispatch, useAppSelector } from '../store';
-import { logout } from '../store/authSlice';
+import { logout, setAuthUser } from '../store/authSlice';
 import {
   createDiagram,
   getDiagram,
@@ -14,9 +15,11 @@ import {
 } from '../services/diagramApi';
 import {
   setDiagrams,
+  setCurrentDiagramType,
   setSelectedDiagramId,
   upsertDiagram,
 } from '../store/diagramSlice';
+import { getCurrentUser } from '../services/userApi';
 
 const initialExample = `graph TD
   A[Начало] --> B{Условие}
@@ -37,6 +40,22 @@ export const EditorPage: React.FC = () => {
     (state) => state.diagram.selectedDiagramId,
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const location = useLocation();
+  const routeDiagramId = (location.state as { diagramId?: number } | null)?.diagramId;
+
+  const loadDiagramById = async (diagramId: number): Promise<void> => {
+    try {
+      const diagram = await getDiagram(diagramId);
+      setSource(diagram.content);
+      dispatch(setCurrentDiagramType(diagram.diagram_type));
+      setStatusMessage(`Загружена диаграмма "${diagram.name}"`);
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.detail ?? 'Не удалось открыть выбранную диаграмму')
+        : 'Не удалось открыть выбранную диаграмму';
+      setStatusMessage(message);
+    }
+  };
 
   const parsed = useMemo(() => {
     try {
@@ -87,6 +106,34 @@ export const EditorPage: React.FC = () => {
       mounted = false;
     };
   }, [dispatch]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadCurrentUser = async (): Promise<void> => {
+      try {
+        const user = await getCurrentUser();
+        if (!mounted) return;
+        dispatch(setAuthUser(user));
+      } catch {
+        // user profile load is optional for editor screen
+      }
+    };
+    void loadCurrentUser();
+    return () => {
+      mounted = false;
+    };
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (typeof routeDiagramId === 'number') {
+      dispatch(setSelectedDiagramId(routeDiagramId));
+      void loadDiagramById(routeDiagramId);
+      return;
+    }
+    if (selectedDiagramId !== null) {
+      void loadDiagramById(selectedDiagramId);
+    }
+  }, [dispatch, routeDiagramId, selectedDiagramId]);
 
   const downloadTextFile = (filename: string, content: string): void => {
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -251,19 +298,27 @@ export const EditorPage: React.FC = () => {
         <h1 style={{ fontSize: '20px', fontWeight: 600, margin: 0 }}>
           Hybrid Diagram Editor
         </h1>
-        <button
-          onClick={() => dispatch(logout())}
-          style={{
-            border: '1px solid #334155',
-            background: '#020617',
-            color: '#e5e7eb',
-            borderRadius: 6,
-            padding: '8px 12px',
-            cursor: 'pointer',
-          }}
-        >
-          Выйти
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link to="/projects" style={topActionLinkStyle}>
+            Проекты
+          </Link>
+          <Link to="/profile" style={topActionLinkStyle}>
+            Профиль
+          </Link>
+          <button
+            onClick={() => dispatch(logout())}
+            style={{
+              border: '1px solid #334155',
+              background: '#020617',
+              color: '#e5e7eb',
+              borderRadius: 6,
+              padding: '8px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            Выйти
+          </button>
+        </div>
       </div>
 
       <Toolbar
@@ -276,19 +331,7 @@ export const EditorPage: React.FC = () => {
             setStatusMessage('Режим новой диаграммы');
             return;
           }
-          void (async () => {
-            try {
-              const diagram = await getDiagram(diagramId);
-              setSource(diagram.content);
-              setStatusMessage(`Загружена диаграмма "${diagram.name}"`);
-            } catch (error) {
-              const message = axios.isAxiosError(error)
-                ? (error.response?.data?.detail ??
-                    'Не удалось открыть выбранную диаграмму')
-                : 'Не удалось открыть выбранную диаграмму';
-              setStatusMessage(message);
-            }
-          })();
+          void loadDiagramById(diagramId);
         }}
         onViewTypeChange={setViewType}
         onOpenFile={openFile}
@@ -441,5 +484,15 @@ const zoomButtonStyle: React.CSSProperties = {
   borderRadius: 6,
   padding: '6px 10px',
   cursor: 'pointer',
+  fontSize: 13,
+};
+
+const topActionLinkStyle: React.CSSProperties = {
+  border: '1px solid #334155',
+  background: '#020617',
+  color: '#e5e7eb',
+  borderRadius: 6,
+  padding: '8px 12px',
+  textDecoration: 'none',
   fontSize: 13,
 };

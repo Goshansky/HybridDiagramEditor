@@ -11,7 +11,7 @@
   - типы диаграмм в БД: `flowchart | class | sequence | er` (`diagram_type`)
   - Alembic миграции (`users`, `diagrams`, `versions`, `diagram_type`)
 - `frontend` на React + Vite + TypeScript:
-  - маршрутизация (`/login`, `/register`, `/`)
+  - маршрутизация (`/login`, `/register`, `/`, `/projects`, `/profile`)
   - защищенный роут (`ProtectedRoute`)
   - auth-state на Redux Toolkit
   - axios interceptor с автоподстановкой `Bearer` токена
@@ -29,6 +29,12 @@
     - `currentDiagramType`
     - `projects`
     - `versions`
+  - страница `Projects`:
+    - список проектов пользователя из `/projects`
+    - действия: открыть в редакторе, переименовать, удалить
+  - страница `Profile`:
+    - просмотр `email` и даты регистрации
+    - смена пароля через `/users/password`
 - `postgres` в Docker Compose
 
 ## Быстрый запуск
@@ -38,6 +44,10 @@ docker compose up --build
 ```
 
 Чеклист проверок и регрессионного прогона: `TESTING.md`.
+
+`backend` в `docker-compose` стартует с авто-применением миграций:
+
+- `alembic upgrade head && uvicorn ...`
 
 После запуска:
 
@@ -82,6 +92,7 @@ docker compose up --build
 
 - `POST /auth/register`
 - `POST /auth/login`
+- `GET /users/me`
 - `PUT /users/password`
 - `GET /projects`
 - `GET /diagrams`
@@ -139,6 +150,7 @@ alembic upgrade head
 - `src/services/projectApi.ts`:
   - `listProjects()`
 - `src/services/userApi.ts`:
+  - `getCurrentUser()`
   - `changePassword({ old_password, new_password })`
 - `src/store/diagramSlice.ts`:
   - сохранены `items`, `selectedDiagramId` (обратная совместимость текущего UI)
@@ -150,7 +162,7 @@ alembic upgrade head
 - Вместо `CodeMirror` пока используется `textarea`.
 - Выбор типа диаграммы в toolbar (`flowchart/class/sequence`) пока влияет только на визуальный режим интерфейса, без отдельного парсинга class/sequence.
 - В UI пока нет отдельной страницы/панели версий (`/diagrams/{id}/versions`), используется только актуальная версия диаграммы.
-- В UI пока нет страниц `/projects` и `/profile` (backend и frontend data layer уже подготовлены).
+- В toolbar редактора пока нет расширенного управления проектами/версиями (селектор версии с восстановлением конкретной версии, создание проекта с выбором типа в модалке) — это следующий этап.
 
 ### Сценарий авторизации
 
