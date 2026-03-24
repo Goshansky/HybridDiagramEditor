@@ -5,6 +5,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { parseMermaidByType, upsertLayoutHint } from '../../parser';
 import { AddEdgeDialog } from '../components/AddEdgeDialog';
 import { AddNodeDialog, type FlowNodeShape } from '../components/AddNodeDialog';
+import { CodeEditor } from '../components/CodeEditor';
 import { ContextMenu } from '../components/ContextMenu';
 import { DiagramCanvas } from '../components/DiagramCanvas';
 import { EdgeEditor } from '../components/EdgeEditor';
@@ -560,7 +561,7 @@ export const EditorPage: React.FC = () => {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".mmd,.txt,.md"
+        accept=".mmd,.txt,.md,.puml"
         style={{ display: 'none' }}
         onChange={handleOpenFile}
       />
@@ -624,22 +625,18 @@ export const EditorPage: React.FC = () => {
           }}
           isSyncing
         />
-        <textarea
+        <CodeEditor
           value={source}
-          onChange={(e) => setSource(e.target.value)}
-          style={{
-            flex: 1,
-            minHeight: '320px',
-            background: '#020617',
-            color: '#e5e7eb',
-            borderRadius: '8px',
-            border: '1px solid #1f2937',
-            padding: '12px',
-            fontFamily:
-              'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-            fontSize: '13px',
-            resize: 'vertical',
+          onChange={setSource}
+          onOpenFile={openFile}
+          onSaveCode={() => {
+            downloadTextFile('diagram.mmd', source);
+            setStatusMessage('Код сохранен');
           }}
+          onGenerateFromCanvas={() => {
+            setStatusMessage('Генерация кода из холста будет добавлена отдельно');
+          }}
+          isSynced
         />
 
         <div
