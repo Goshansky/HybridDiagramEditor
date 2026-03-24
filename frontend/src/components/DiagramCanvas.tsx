@@ -15,7 +15,6 @@ interface DiagramCanvasProps {
   onSelectNode?: (id: string | null) => void;
   onNodePositionChange?: (id: string, x: number, y: number) => void;
   disableNodeDrag?: boolean;
-  onCanvasContextMenu?: (x: number, y: number) => void;
   onNodeDoubleClick?: (id: string) => void;
   onEdgeDoubleClick?: (edge: { from: string; to: string; label?: string; type: 'arrow' | 'line' }) => void;
 }
@@ -108,7 +107,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   onSelectNode,
   onNodePositionChange,
   disableNodeDrag = false,
-  onCanvasContextMenu,
   onNodeDoubleClick,
   onEdgeDoubleClick,
 }) => {
@@ -148,10 +146,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     svgSelection.call(zoomBehavior as any);
     zoomBehaviorRef.current = zoomBehavior;
 
-    // отключаем нативное контекстное меню, чтобы правая кнопка мыши панорамировала холст
-    svgSelection.on('contextmenu', (event) => {
-      event.preventDefault();
-    });
 
     zoomInitializedRef.current = true;
   }, []);
@@ -465,16 +459,31 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .drag<SVGGElement, PositionedNode>()
       .on('start', (event) => {
         event.sourceEvent?.stopPropagation();
+        // Визуальное выделение узла при начале перетаскивания
+        d3.select<SVGGElement, PositionedNode>(event.source)
+          .select<
+            SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
+          >('rect,polygon,circle,ellipse,path')
+          .attr('opacity', 0.7)
+          .attr('stroke-width', 3);
       })
       .on('drag', (event, d) => {
         d.x += event.dx;
         d.y += event.dy;
+        // Обновление позиции в реальном времени для предпросмотра
         d3.select<SVGGElement, PositionedNode>(event.source).attr(
           'transform',
           `translate(${d.x},${d.y})`,
         );
       })
       .on('end', (event, d) => {
+        // Восстановление визуального стиля
+        d3.select<SVGGElement, PositionedNode>(event.source)
+          .select<
+            SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
+          >('rect,polygon,circle,ellipse,path')
+          .attr('opacity', 1)
+          .attr('stroke-width', (n) => (n.id === selectedNodeId ? 2.5 : 1.5));
         onNodePositionChange?.(d.id, d.x, d.y);
       });
 
@@ -486,10 +495,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .on('dblclick', (event, d) => {
         event.stopPropagation();
         onNodeDoubleClick?.(d.id);
-      })
-      .on('contextmenu', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
       });
     if (!disableNodeDrag) {
       nodeMerge.call(dragBehavior as any);
@@ -499,12 +504,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     svgSelection
       .on('click', () => {
         onSelectNode?.(null);
-      })
-      .on('contextmenu', (event) => {
-        event.preventDefault();
-        onCanvasContextMenu?.(event.clientX, event.clientY);
       });
-  }, [model, width, height, onNodePositionChange, onSelectNode, selectedNodeId, disableNodeDrag, onCanvasContextMenu, onNodeDoubleClick, onEdgeDoubleClick]);
+  }, [model, width, height, onNodePositionChange, onSelectNode, selectedNodeId, disableNodeDrag, onNodeDoubleClick, onEdgeDoubleClick]);
 
   return (
     <svg

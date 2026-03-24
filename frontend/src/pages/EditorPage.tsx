@@ -19,7 +19,6 @@ import { parseMermaidByType, upsertLayoutHint } from '../../parser';
 import { AddEdgeDialog } from '../components/AddEdgeDialog';
 import { AddNodeDialog, type FlowNodeShape } from '../components/AddNodeDialog';
 import { CodeEditor } from '../components/CodeEditor';
-import { ContextMenu } from '../components/ContextMenu';
 import { DiagramCanvas } from '../components/DiagramCanvas';
 import { EdgeEditor } from '../components/EdgeEditor';
 import { NodeEditor } from '../components/NodeEditor';
@@ -58,7 +57,6 @@ export const EditorPage: React.FC = () => {
   const [zoomPercent, setZoomPercent] = useState(100);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
-  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [pendingNodePos, setPendingNodePos] = useState<{ x: number; y: number } | null>(null);
   const [showAddNodeDialog, setShowAddNodeDialog] = useState(false);
   const [showAddEdgeDialog, setShowAddEdgeDialog] = useState(false);
@@ -453,7 +451,6 @@ export const EditorPage: React.FC = () => {
     }
     setPendingNodePos(at ?? { x: 180, y: 140 });
     setShowAddNodeDialog(true);
-    setContextMenuPos(null);
   };
 
   const beginAddEdge = (): void => {
@@ -463,7 +460,6 @@ export const EditorPage: React.FC = () => {
     }
     setEdgeAddModeFrom(null);
     setStatusMessage('Режим добавления связи: кликни узел-источник, затем узел-цель');
-    setContextMenuPos(null);
   };
 
   const handleCreateNode = (payload: { label: string; shape: FlowNodeShape }): void => {
@@ -546,7 +542,7 @@ export const EditorPage: React.FC = () => {
         display: 'flex',
         flexDirection: 'column',
         padding: '16px',
-        gap: '16px',
+        gap: '0',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
         background: '#ffffff',
         color: '#111827',
@@ -645,7 +641,7 @@ export const EditorPage: React.FC = () => {
         </div>
       ) : null}
 
-      <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
+      <div style={{ display: 'flex', gap: '0', flex: 1 }}>
         <SidePanel
           diagrams={diagramItems}
           selectedDiagramId={selectedDiagramId}
@@ -787,7 +783,6 @@ export const EditorPage: React.FC = () => {
                 disableNodeDrag={currentDiagramType === 'sequence'}
                 selectedNodeId={selectedNodeId ?? undefined}
                 onSelectNode={handleCanvasNodeSelect}
-                onCanvasContextMenu={(x, y) => setContextMenuPos({ x, y })}
                 onNodeDoubleClick={(id) => {
                   if (currentDiagramType !== 'flowchart') return;
                   setEditingNodeId(id);
@@ -865,15 +860,6 @@ export const EditorPage: React.FC = () => {
           <span style={{ color: '#9ca3af' }}>Версия: v1.2</span>
         </div>
       </div>
-      {contextMenuPos ? (
-        <ContextMenu
-          x={contextMenuPos.x}
-          y={contextMenuPos.y}
-          onAddNode={() => beginAddNode({ x: contextMenuPos.x - 420, y: contextMenuPos.y - 180 })}
-          onAddEdge={beginAddEdge}
-          onClose={() => setContextMenuPos(null)}
-        />
-      ) : null}
       {showAddNodeDialog ? (
         <AddNodeDialog
           onCancel={() => {
