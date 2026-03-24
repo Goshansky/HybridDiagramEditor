@@ -4,14 +4,16 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.crud import (
     create_diagram,
+    delete_diagram,
     get_diagram_by_id,
     list_diagram_versions,
     list_diagrams,
+    rename_diagram,
     update_diagram,
 )
 from app.database import get_db
 from app.models import User
-from app.schemas import DiagramCreate, DiagramRead, DiagramUpdate, VersionRead
+from app.schemas import DiagramCreate, DiagramRead, DiagramUpdate, RenameDiagramRequest, VersionRead
 
 router = APIRouter(prefix="/diagrams", tags=["diagrams"])
 
@@ -68,3 +70,28 @@ def get_versions(
     if not diagram:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Диаграмма не найдена")
     return list_diagram_versions(db, diagram.id)
+
+
+@router.put("/{diagram_id}/rename", response_model=DiagramRead)
+def rename_existing_diagram(
+    diagram_id: int,
+    payload: RenameDiagramRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DiagramRead:
+    diagram = get_diagram_by_id(db, diagram_id, current_user.id)
+    if not diagram:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Диаграмма не найдена")
+    return rename_diagram(db, diagram, payload.name)
+
+
+@router.delete("/{diagram_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_existing_diagram(
+    diagram_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    diagram = get_diagram_by_id(db, diagram_id, current_user.id)
+    if not diagram:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Диаграмма не найдена")
+    delete_diagram(db, diagram)

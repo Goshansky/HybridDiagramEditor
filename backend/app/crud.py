@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_password_hash, verify_password
 from app.models import Diagram, User, Version
-from app.schemas import DiagramCreate, DiagramUpdate, UserCreate
+from app.schemas import DiagramCreate, DiagramUpdate, ProjectItemRead, UserCreate
 
 
 def get_user_by_email(db: Session, email: str) -> User | None:
@@ -38,13 +38,19 @@ def list_diagrams(db: Session, user_id: int) -> list[Diagram]:
 
 
 def create_diagram(db: Session, user_id: int, payload: DiagramCreate) -> Diagram:
-    diagram = Diagram(user_id=user_id, name=payload.name, content=payload.content)
+    initial_content = payload.content or ""
+    diagram = Diagram(
+        user_id=user_id,
+        name=payload.name,
+        content=initial_content,
+        diagram_type=payload.type,
+    )
     db.add(diagram)
     db.flush()
 
     first_version = Version(
         diagram_id=diagram.id,
-        content=payload.content,
+        content=initial_content,
         version_number=1,
     )
     db.add(first_version)
@@ -70,6 +76,8 @@ def update_diagram(
         diagram.name = payload.name
     if payload.content is not None:
         diagram.content = payload.content
+    if payload.diagram_type is not None:
+        diagram.diagram_type = payload.diagram_type
     db.add(diagram)
     db.flush()
 
@@ -99,3 +107,52 @@ def list_diagram_versions(db: Session, diagram_id: int) -> list[Version]:
         .order_by(desc(Version.version_number))
     )
     return list(db.execute(stmt).scalars().all())
+
+
+def list_projects(db: Session, user_id: int) -> list[ProjectItemRead]:
+    stmt = (
+        select(
+            Diagram.id,
+            Diagram.name,
+            Diagram.diagram_type,
+            Diagram.updated_at,
+            func.count(Version.id).label("versions_count"),
+        )
+        .outerjoin(Version, Version.diagram_id == Diagram.id)
+        .where(Diagram.user_id == user_id)
+        .group_by(Diagram.id)
+        .order_by(desc(Diagram.updated_at))
+    )
+    rows = db.execute(stmt).all()
+    return [
+        ProjectItemRead(
+            id=row.id,
+            name=row.name,
+            diagram_type=row.diagram_type,
+            updated_at=row.updated_at,
+            versions_count=int(row.versions_count or 0),
+        )
+        for row in rows
+    ]
+
+
+def rename_diagram(db: Session, diagram: Diagram, name: str) -> Diagram:
+    diagram.name = name
+    db.add(diagram)
+    db.commit()
+    db.refresh(diagram)
+    return diagram
+
+
+def delete_diagram(db: Session, diagram: Diagram) -> None:
+    db.delete(diagram)
+    db.commit()
+
+
+def change_user_password(db: Session, user: User, old_password: str, new_password: str) -> bool:
+    if not verify_password(old_password, user.hashed_password):
+        return False
+    user.hashed_password = get_password_hash(new_password)
+    db.add(user)
+    db.commit()
+    return True

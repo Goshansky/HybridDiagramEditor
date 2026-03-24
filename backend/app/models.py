@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+DIAGRAM_TYPES = ("flowchart", "class", "sequence", "er")
 
 
 def utcnow() -> datetime:
@@ -31,6 +33,11 @@ class Diagram(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    diagram_type: Mapped[str] = mapped_column(
+        Enum(*DIAGRAM_TYPES, name="diagram_type_enum"),
+        nullable=False,
+        default="flowchart",
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, diagrams
+from app.routers import auth, diagrams, projects, users
 
 app = FastAPI(
     title="Hybrid Diagram Editor API",
@@ -19,6 +19,8 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(diagrams.router)
+app.include_router(projects.router)
+app.include_router(users.router)
 
 
 @app.get("/health", tags=["system"])

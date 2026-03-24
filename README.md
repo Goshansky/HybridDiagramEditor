@@ -5,8 +5,11 @@
 - `backend` на FastAPI:
   - JWT-аутентификация (`/auth/register`, `/auth/login`)
   - CRUD диаграмм пользователя (`/diagrams*`)
+  - список проектов (`/projects`)
+  - смена пароля пользователя (`/users/password`)
   - версионирование диаграмм (`/diagrams/{id}/versions`)
-  - Alembic миграции (`users`, `diagrams`, `versions`)
+  - типы диаграмм в БД: `flowchart | class | sequence | er` (`diagram_type`)
+  - Alembic миграции (`users`, `diagrams`, `versions`, `diagram_type`)
 - `frontend` на React + Vite + TypeScript:
   - маршрутизация (`/login`, `/register`, `/`)
   - защищенный роут (`ProtectedRoute`)
@@ -69,15 +72,29 @@ docker compose up --build
 
 - `POST /auth/register`
 - `POST /auth/login`
+- `PUT /users/password`
+- `GET /projects`
 - `GET /diagrams`
 - `POST /diagrams`
 - `GET /diagrams/{id}`
 - `PUT /diagrams/{id}`
+- `PUT /diagrams/{id}/rename`
+- `DELETE /diagrams/{id}`
 - `GET /diagrams/{id}/versions`
 
-Для всех `diagrams` endpoint нужен заголовок:
+Для всех endpoint, кроме `/auth/*`, нужен заголовок:
 
 `Authorization: Bearer <token>`
+
+### Контракты диаграмм (актуально)
+
+- `POST /diagrams`:
+  - `name: string`
+  - `type: "flowchart" | "class" | "sequence" | "er"`
+  - `content: string` (может быть пустым, backend создаст первую версию)
+- `GET /diagrams*` и `PUT /diagrams*` возвращают поле `diagram_type`.
+- `GET /projects` возвращает метаданные:
+  - `id`, `name`, `diagram_type`, `updated_at`, `versions_count`.
 
 ## Миграции
 
@@ -86,6 +103,11 @@ docker compose up --build
 ```bash
 alembic upgrade head
 ```
+
+В этом состоянии должны применяться ревизии:
+
+- `20260323_0001` — initial schema
+- `20260324_0002` — `diagram_type` + расширение проекта
 
 ## Frontend
 
@@ -101,6 +123,7 @@ alembic upgrade head
 - Вместо `CodeMirror` пока используется `textarea`.
 - Выбор типа диаграммы в toolbar (`flowchart/class/sequence`) пока влияет только на визуальный режим интерфейса, без отдельного парсинга class/sequence.
 - В UI пока нет отдельной страницы/панели версий (`/diagrams/{id}/versions`), используется только актуальная версия диаграммы.
+- В UI пока нет страниц `/projects` и `/profile` (backend уже подготовлен частично: проекты и смена пароля).
 
 ### Сценарий авторизации
 
