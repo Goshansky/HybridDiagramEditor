@@ -9,8 +9,12 @@
     "test:parser": "tsx parser/testScenarios.ts"
   },
   "dependencies": {
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.40.0",
     "@reduxjs/toolkit": "^2.11.2",
     "axios": "^1.13.6",
+    "codemirror": "^6.0.2",
     "d3": "^7.9.0",
     "lucide-react": "^0.294.0",
     "react": "^18.3.1",

@@ -78,6 +78,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         Создать новую диаграмму
       </button>
       <select
+        value={diagramType}
+        onChange={(event) => onSelectDiagramType(event.target.value as DiagramType)}
+        style={controlStyle}
+      >
+        <option value="flowchart">Тип: Блок-схема</option>
+        <option value="class">Тип: Диаграмма классов</option>
+        <option value="sequence">Тип: Диаграмма последовательности</option>
+        <option value="er">Тип: ER-диаграмма</option>
+      </select>
+      <select
         value={selectedVersionId ?? ''}
         onFocus={onLoadVersions}
         onChange={(event) => {
@@ -107,8 +117,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button style={controlStyle} onClick={onAddEdge}>
         Добавить связь
       </button>
+      <button style={controlStyle} onClick={onOpenFile}>
+        Открыть файл
+      </button>
+      <button style={controlStyle} onClick={onSaveCode}>
+        Сохранить код
+      </button>
+      <button style={controlStyle} onClick={onSaveImageSvg}>
+        Сохранить SVG
+      </button>
       <button style={controlStyle} onClick={onSaveImagePng}>
         Сохранить PNG
+      </button>
+      <button style={controlStyle} onClick={onSaveVersion}>
+        Сохранить версию
+      </button>
+      <button style={controlStyle} onClick={onRestoreLastVersion}>
+        Вернуться к последней версии
       </button>
     </div>
   );
