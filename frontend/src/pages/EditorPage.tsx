@@ -11,12 +11,16 @@ import {
   createDiagram,
   getDiagram,
   listDiagrams,
+  listVersions,
   updateDiagram,
+  type DiagramType,
 } from '../services/diagramApi';
 import {
+  clearVersions,
   setDiagrams,
   setCurrentDiagramType,
   setSelectedDiagramId,
+  setVersions,
   upsertDiagram,
 } from '../store/diagramSlice';
 import { getCurrentUser } from '../services/userApi';
@@ -34,8 +38,11 @@ export const EditorPage: React.FC = () => {
   const [zoomNonce, setZoomNonce] = useState(0);
   const [zoomType, setZoomType] = useState<'in' | 'out' | 'reset'>('reset');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
   const dispatch = useAppDispatch();
   const diagramItems = useAppSelector((state) => state.diagram.items);
+  const currentDiagramType = useAppSelector((state) => state.diagram.currentDiagramType);
+  const versions = useAppSelector((state) => state.diagram.versions);
   const selectedDiagramId = useAppSelector(
     (state) => state.diagram.selectedDiagramId,
   );
@@ -48,6 +55,8 @@ export const EditorPage: React.FC = () => {
       const diagram = await getDiagram(diagramId);
       setSource(diagram.content);
       dispatch(setCurrentDiagramType(diagram.diagram_type));
+      setSelectedVersionId(null);
+      dispatch(clearVersions());
       setStatusMessage(`Загружена диаграмма "${diagram.name}"`);
     } catch (error) {
       const message = axios.isAxiosError(error)
@@ -215,7 +224,7 @@ export const EditorPage: React.FC = () => {
         }
         const created = await createDiagram({
           name,
-          type: 'flowchart',
+          type: currentDiagramType,
           content: source,
         });
         dispatch(
@@ -262,6 +271,138 @@ export const EditorPage: React.FC = () => {
       const message = axios.isAxiosError(error)
         ? (error.response?.data?.detail ?? 'Не удалось загрузить диаграмму')
         : 'Не удалось загрузить диаграмму';
+      setStatusMessage(message);
+    }
+  };
+
+  const loadVersionsForCurrentDiagram = async (): Promise<void> => {
+    if (selectedDiagramId === null) {
+      dispatch(clearVersions());
+      setSelectedVersionId(null);
+      return;
+    }
+    try {
+      const versionItems = await listVersions(selectedDiagramId);
+      dispatch(
+        setVersions(
+          versionItems.map((version) => ({
+            id: version.id,
+            diagramId: version.diagram_id,
+            versionNumber: version.version_number,
+            createdAt: version.created_at,
+            content: version.content,
+          })),
+        ),
+      );
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.detail ?? 'Не удалось загрузить версии')
+        : 'Не удалось загрузить версии';
+      setStatusMessage(message);
+    }
+  };
+
+  const handleSelectVersion = (versionId: number | null): void => {
+    setSelectedVersionId(versionId);
+    if (versionId === null) return;
+    const selected = versions.find((version) => version.id === versionId);
+    if (!selected) return;
+    setSource(selected.content);
+    setStatusMessage(`Загружен предпросмотр версии v${selected.versionNumber}`);
+  };
+
+  const restoreSelectedVersion = async (): Promise<void> => {
+    if (selectedDiagramId === null || selectedVersionId === null) {
+      setStatusMessage('Сначала выбери диаграмму и версию');
+      return;
+    }
+    const selected = versions.find((version) => version.id === selectedVersionId);
+    if (!selected) {
+      setStatusMessage('Выбранная версия не найдена');
+      return;
+    }
+    try {
+      const updated = await updateDiagram(selectedDiagramId, {
+        content: selected.content,
+      });
+      setSource(updated.content);
+      dispatch(
+        upsertDiagram({
+          id: updated.id,
+          name: updated.name,
+          updatedAt: updated.updated_at,
+          diagramType: updated.diagram_type,
+        }),
+      );
+      setStatusMessage(`Восстановлена версия v${selected.versionNumber}`);
+      await loadVersionsForCurrentDiagram();
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.detail ?? 'Не удалось восстановить версию')
+        : 'Не удалось восстановить версию';
+      setStatusMessage(message);
+    }
+  };
+
+  const handleSelectDiagramType = (diagramType: DiagramType): void => {
+    if (diagramType === currentDiagramType) {
+      return;
+    }
+    const applyTemplate = window.confirm(
+      'Заменить текущий текст на шаблон выбранного типа? Нажми "Отмена", чтобы оставить как есть.',
+    );
+    dispatch(setCurrentDiagramType(diagramType));
+    if (applyTemplate) {
+      setSource(getTemplateByDiagramType(diagramType));
+      setStatusMessage(`Выбран тип "${diagramType}", загружен шаблон`);
+    } else {
+      setStatusMessage(`Выбран тип "${diagramType}", текущий текст сохранен`);
+    }
+  };
+
+  const handleCreateDiagram = async (): Promise<void> => {
+    const enteredName = window.prompt('Название диаграммы', 'Новая диаграмма');
+    const name = enteredName?.trim();
+    if (!name) {
+      setStatusMessage('Создание отменено: не указано название');
+      return;
+    }
+
+    const typeValue = window.prompt(
+      'Тип диаграммы: flowchart | class | sequence | er',
+      currentDiagramType,
+    );
+    const selectedType = normalizeDiagramType(typeValue ?? currentDiagramType);
+    if (!selectedType) {
+      setStatusMessage('Создание отменено: указан некорректный тип');
+      return;
+    }
+
+    try {
+      const template = getTemplateByDiagramType(selectedType);
+      const created = await createDiagram({
+        name,
+        type: selectedType,
+        content: template,
+      });
+      dispatch(
+        upsertDiagram({
+          id: created.id,
+          name: created.name,
+          updatedAt: created.updated_at,
+          diagramType: created.diagram_type,
+        }),
+      );
+      dispatch(setCurrentDiagramType(created.diagram_type));
+      dispatch(setSelectedDiagramId(created.id));
+      setSource(created.content || template);
+      setSelectedVersionId(null);
+      dispatch(clearVersions());
+      setStatusMessage(`Создана диаграмма "${created.name}" (${created.diagram_type})`);
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.detail ?? 'Не удалось создать диаграмму')
+        : 'Не удалось создать диаграмму';
       setStatusMessage(message);
     }
   };
@@ -325,13 +466,29 @@ export const EditorPage: React.FC = () => {
         viewType={viewType}
         diagrams={diagramItems}
         selectedDiagramId={selectedDiagramId}
+        diagramType={currentDiagramType}
+        versions={versions}
+        selectedVersionId={selectedVersionId}
         onSelectDiagram={(diagramId) => {
           dispatch(setSelectedDiagramId(diagramId));
           if (diagramId === null) {
+            dispatch(clearVersions());
+            setSelectedVersionId(null);
             setStatusMessage('Режим новой диаграммы');
             return;
           }
           void loadDiagramById(diagramId);
+        }}
+        onCreateDiagram={() => {
+          void handleCreateDiagram();
+        }}
+        onSelectDiagramType={handleSelectDiagramType}
+        onLoadVersions={() => {
+          void loadVersionsForCurrentDiagram();
+        }}
+        onSelectVersion={handleSelectVersion}
+        onRestoreSelectedVersion={() => {
+          void restoreSelectedVersion();
         }}
         onViewTypeChange={setViewType}
         onOpenFile={openFile}
@@ -496,3 +653,47 @@ const topActionLinkStyle: React.CSSProperties = {
   textDecoration: 'none',
   fontSize: 13,
 };
+
+function getTemplateByDiagramType(diagramType: DiagramType): string {
+  if (diagramType === 'class') {
+    return `classDiagram
+  class User {
+    +id: int
+    +email: string
+    +login()
+  }
+  class Admin
+  User <|-- Admin`;
+  }
+  if (diagramType === 'sequence') {
+    return `sequenceDiagram
+  participant A as User
+  participant B as Service
+  A->>B: Request
+  B-->>A: Response`;
+  }
+  if (diagramType === 'er') {
+    return `erDiagram
+  USER {
+    int id
+    string email
+  }
+  ORDER {
+    int id
+    int user_id
+  }
+  USER ||--o{ ORDER : has`;
+  }
+  return `graph TD
+  A[Начало] --> B{Условие}
+  B -->|Да| C[Действие 1]
+  B -->|Нет| D[Действие 2]`;
+}
+
+function normalizeDiagramType(raw: string): DiagramType | null {
+  const value = raw.trim().toLowerCase();
+  if (value === 'flowchart' || value === 'class' || value === 'sequence' || value === 'er') {
+    return value;
+  }
+  return null;
+}
