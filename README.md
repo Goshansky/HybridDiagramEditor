@@ -171,6 +171,8 @@ alembic upgrade head
 - `react-router-dom`
 - `axios`
 - `d3`
+- `codemirror` (`@codemirror/state`, `@codemirror/view`, `@codemirror/lang-markdown`)
+- `lucide-react`
 
 ### Data layer
 
@@ -207,6 +209,7 @@ alembic upgrade head
 ### Текущие ограничения
 
 - Вместо `CodeMirror` пока используется `textarea`.
+- В кодовой базе есть прототипные компоненты `CodeEditor` и `SidePanel`, но они пока не подключены к основному экрану редактора.
 - Парсинг/рендер `class`, `sequence`, `er` пока MVP-уровня (не полный Mermaid grammar).
 - Для создания диаграммы и выбора типа по-прежнему используются `prompt/confirm`; кастомные модальные окна еще не внедрены.
 - В dropdown версий пока нет явной визуальной метки "текущая версия".
