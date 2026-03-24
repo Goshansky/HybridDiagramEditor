@@ -21,6 +21,14 @@
   - toolbar: открыть файл, сохранить код, экспорт SVG/PNG, сохранить версию и восстановить через backend
   - обратная синхронизация: `drag node -> update %% {"layout": ...}` в source
   - server-side интеграция диаграмм: список, создание, обновление, загрузка выбранной диаграммы
+  - расширен data layer под этап проектов/версий:
+    - `diagramApi`: `diagram_type`, `rename`, `delete`, `listVersions`
+    - `projectApi`: `GET /projects`
+    - `userApi`: `PUT /users/password`
+  - расширен Redux-срез диаграмм:
+    - `currentDiagramType`
+    - `projects`
+    - `versions`
 - `postgres` в Docker Compose
 
 ## Быстрый запуск
@@ -28,6 +36,8 @@
 ```bash
 docker compose up --build
 ```
+
+Чеклист проверок и регрессионного прогона: `TESTING.md`.
 
 После запуска:
 
@@ -117,13 +127,30 @@ alembic upgrade head
 - `react-redux`
 - `react-router-dom`
 - `axios`
+- `d3`
+
+### Data layer (актуально после этапа 2)
+
+- `src/services/diagramApi.ts`:
+  - `DiagramType = "flowchart" | "class" | "sequence" | "er"`
+  - `createDiagram({ name, type, content? })`
+  - `updateDiagram(..., { name?, content?, diagram_type? })`
+  - `renameDiagram`, `deleteDiagram`, `listVersions`
+- `src/services/projectApi.ts`:
+  - `listProjects()`
+- `src/services/userApi.ts`:
+  - `changePassword({ old_password, new_password })`
+- `src/store/diagramSlice.ts`:
+  - сохранены `items`, `selectedDiagramId` (обратная совместимость текущего UI)
+  - добавлены `currentDiagramType`, `projects`, `versions`
+  - добавлены экшены `setProjects`, `upsertProject`, `removeProject`, `setVersions`, `clearVersions`, `setCurrentDiagramType`
 
 ### Текущие ограничения
 
 - Вместо `CodeMirror` пока используется `textarea`.
 - Выбор типа диаграммы в toolbar (`flowchart/class/sequence`) пока влияет только на визуальный режим интерфейса, без отдельного парсинга class/sequence.
 - В UI пока нет отдельной страницы/панели версий (`/diagrams/{id}/versions`), используется только актуальная версия диаграммы.
-- В UI пока нет страниц `/projects` и `/profile` (backend уже подготовлен частично: проекты и смена пароля).
+- В UI пока нет страниц `/projects` и `/profile` (backend и frontend data layer уже подготовлены).
 
 ### Сценарий авторизации
 

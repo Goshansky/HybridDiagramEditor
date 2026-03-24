@@ -70,6 +70,7 @@ export const EditorPage: React.FC = () => {
               id: item.id,
               name: item.name,
               updatedAt: item.updated_at,
+              diagramType: item.diagram_type,
             })),
           ),
         );
@@ -165,12 +166,17 @@ export const EditorPage: React.FC = () => {
           setStatusMessage('Сохранение отменено: не указано название');
           return;
         }
-        const created = await createDiagram({ name, content: source });
+        const created = await createDiagram({
+          name,
+          type: 'flowchart',
+          content: source,
+        });
         dispatch(
           upsertDiagram({
             id: created.id,
             name: created.name,
             updatedAt: created.updated_at,
+            diagramType: created.diagram_type,
           }),
         );
         dispatch(setSelectedDiagramId(created.id));
@@ -184,6 +190,7 @@ export const EditorPage: React.FC = () => {
           id: updated.id,
           name: updated.name,
           updatedAt: updated.updated_at,
+          diagramType: updated.diagram_type,
         }),
       );
       setStatusMessage(`Диаграмма "${updated.name}" обновлена`);
