@@ -161,7 +161,12 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         if (event.type === 'wheel') return true;
         if (event.type === 'mousedown') {
           const mouseEvent = event as MouseEvent;
-          return mouseEvent.button === 2;
+          if (mouseEvent.button !== 0) return false;
+          const t = event.target as Element | null;
+          if (t?.closest?.('g.node')) return false;
+          if (t?.closest?.('g.edge')) return false;
+          if (t?.closest?.('g.lifelines')) return false;
+          return true;
         }
         return event.type !== 'dblclick';
       })
@@ -261,6 +266,16 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .attr('y', -2000)
       .attr('width', 4000)
       .attr('height', 4000);
+
+    let panHitRect = rootG.select<SVGRectElement>('rect.canvas-pan-hit');
+    if (panHitRect.empty()) {
+      panHitRect = rootG
+        .insert('rect', 'g.edges')
+        .attr('class', 'canvas-pan-hit')
+        .attr('fill', 'transparent')
+        .attr('pointer-events', 'all');
+    }
+    panHitRect.attr('x', -2000).attr('y', -2000).attr('width', 4000).attr('height', 4000);
 
     const fallbackLayout = computeLayout(model, width, height);
 
