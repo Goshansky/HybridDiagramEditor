@@ -15,6 +15,9 @@ export interface DiagramNodeModel {
   styles: Record<string, string>;
   x?: number;
   y?: number;
+  /** Override размера узла на холсте (из layout-хинта или UI). */
+  width?: number;
+  height?: number;
 }
 
 export type EdgeType = 'arrow' | 'line';
@@ -81,17 +84,18 @@ export function buildDiagramModel(ast: DiagramAst): DiagramModel {
   const applyLayout = (hint: LayoutHintAst): void => {
     if (!hint.layout) return;
     for (const [nodeId, data] of Object.entries(hint.layout as Record<string, LayoutHintData>)) {
+      const node = ensureNode(nodeId);
+      if (typeof data.width === 'number') node.width = data.width;
+      if (typeof data.height === 'number') node.height = data.height;
       const { x, y } = data;
       if (typeof x === 'number' && typeof y === 'number') {
-        const node = ensureNode(nodeId);
         node.x = x;
         node.y = y;
         layout[nodeId] = { x, y };
-      } else {
-        // некорректные координаты – игнорируем
+      } else if (typeof data.width !== 'number' && typeof data.height !== 'number') {
         // eslint-disable-next-line no-console
         console.warn(
-          `Layout hint for node "${nodeId}" пропущен: отсутствуют корректные x/y`,
+          `Layout hint for node "${nodeId}" пропущен: нет координат x/y и нет width/height`,
         );
       }
     }

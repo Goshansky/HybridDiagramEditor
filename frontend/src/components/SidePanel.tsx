@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
-import { X, Settings, Palette, Grid3X3, FileUp, Save, Image, GitBranch, RotateCcw, RefreshCw } from 'lucide-react';
+import {
+  X,
+  Settings,
+  Palette,
+  Grid3X3,
+  FileUp,
+  Save,
+  Image,
+  GitBranch,
+  RotateCcw,
+  RefreshCw,
+  ChevronsLeft,
+  ChevronsRight,
+} from 'lucide-react';
 import type { DiagramType } from '../services/diagramApi';
 
 interface SidePanelProps {
@@ -23,6 +36,10 @@ interface SidePanelProps {
   onSaveVersion: () => void;
   onRestore: () => void;
   onClose?: () => void;
+  /** Свернута ли панель (узкая полоса с кнопкой развернуть). */
+  collapsed?: boolean;
+  onCollapseSidebar?: () => void;
+  onExpandSidebar?: () => void;
   isSyncing?: boolean;
 }
 
@@ -47,16 +64,58 @@ export const SidePanel: React.FC<SidePanelProps> = ({
   onSaveVersion,
   onRestore,
   onClose,
+  collapsed = false,
+  onCollapseSidebar,
+  onExpandSidebar,
   isSyncing = false,
 }) => {
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [gridSnap, setGridSnap] = useState(true);
 
+  if (collapsed) {
+    return (
+      <div
+        style={{
+          height: '100%',
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          paddingTop: 12,
+          background: '#ffffff',
+          borderRadius: '8px',
+          boxSizing: 'border-box',
+        }}
+      >
+        <button
+          type="button"
+          title="Развернуть панель"
+          onClick={() => onExpandSidebar?.()}
+          style={{
+            padding: 8,
+            border: '1px solid #e5e7eb',
+            borderRadius: 8,
+            background: '#f9fafb',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ChevronsRight size={18} color="#374151" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
         position: 'relative',
-        width: '256px',
+        width: '100%',
+        height: '100%',
+        minHeight: 0,
+        boxSizing: 'border-box',
         background: '#ffffff',
         borderRadius: '8px',
         padding: '16px',
@@ -64,10 +123,31 @@ export const SidePanel: React.FC<SidePanelProps> = ({
         display: 'flex',
         flexDirection: 'column',
         gap: '24px',
-        maxHeight: 'calc(100vh - 100px)',
         overflowY: 'auto',
       }}
     >
+      {onCollapseSidebar ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -4, marginBottom: -8 }}>
+          <button
+            type="button"
+            title="Свернуть панель"
+            onClick={() => onCollapseSidebar()}
+            style={{
+              padding: 6,
+              border: '1px solid #e5e7eb',
+              borderRadius: 8,
+              background: '#f9fafb',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <ChevronsLeft size={18} color="#374151" />
+          </button>
+        </div>
+      ) : null}
+
       {onClose ? (
         <button
           onClick={onClose}

@@ -22,6 +22,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   isSynced = false,
 }) => {
   const [language, setLanguage] = useState<'mermaid' | 'plantuml'>('mermaid');
+  const rootRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -115,8 +116,24 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     }
   }, [value]);
 
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const ro = new ResizeObserver(() => {
+      editorRef.current?.requestMeasure();
+    });
+    ro.observe(root);
+    return () => {
+      ro.disconnect();
+    };
+  }, []);
+
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#f9fafb', borderRadius: '8px' }}>
+    <div
+      ref={rootRef}
+      data-code-editor-root
+      style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#f9fafb', borderRadius: '8px', minHeight: 0 }}
+    >
       <div
         style={{
           background: '#ffffff',
@@ -156,14 +173,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: '16px', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div
         style={{
-          minHeight: '360px',
-          minWidth: '420px',
-          height: '520px',
+          flex: 1,
+          minHeight: 280,
+          minWidth: 200,
           width: '100%',
-          resize: 'both',
           overflow: 'hidden',
           maxWidth: '100%',
         }}

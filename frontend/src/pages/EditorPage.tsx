@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { usePanelRef } from 'react-resizable-panels';
 import axios from 'axios';
 import {
   BookOpen,
@@ -22,6 +23,8 @@ import { CodeEditor } from '../components/CodeEditor';
 import { DiagramCanvas } from '../components/DiagramCanvas';
 import { EdgeEditor } from '../components/EdgeEditor';
 import { NodeEditor } from '../components/NodeEditor';
+import { PropertiesPanel } from '../components/PropertiesPanel';
+import { ResizableEditorLayout } from '../components/ResizableEditorLayout';
 import { SidePanel } from '../components/SidePanel';
 import { useAppDispatch, useAppSelector } from '../store';
 import { logout, setAuthUser } from '../store/authSlice';
@@ -42,6 +45,13 @@ import {
   upsertDiagram,
 } from '../store/diagramSlice';
 import { getCurrentUser } from '../services/userApi';
+import {
+  clearSelectedElement,
+  getSelectedEdgeIndexFromState,
+  getSelectedNodeIdFromState,
+  setSelectedEdge,
+  setSelectedNode,
+} from '../store/uiSlice';
 
 const initialExample = `graph TD
   A[Начало] --> B{Условие}
@@ -51,7 +61,9 @@ const initialExample = `graph TD
 
 export const EditorPage: React.FC = () => {
   const [source, setSource] = useState(initialExample);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [edgePickActive, setEdgePickActive] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarPanelRef = usePanelRef();
   const [zoomNonce, setZoomNonce] = useState(0);
   const [zoomType, setZoomType] = useState<'in' | 'out' | 'reset'>('reset');
   const [zoomPercent, setZoomPercent] = useState(100);
@@ -76,6 +88,11 @@ export const EditorPage: React.FC = () => {
   const selectedDiagramId = useAppSelector(
     (state) => state.diagram.selectedDiagramId,
   );
+  const selectedCanvasNodeId = useAppSelector((state) => getSelectedNodeIdFromState(state.ui));
+  const selectedCanvasEdgeIndex = useAppSelector((state) =>
+    getSelectedEdgeIndexFromState(state.ui),
+  );
+  const hasCanvasSelection = useAppSelector((state) => state.ui.selectedElementType !== null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const location = useLocation();
   const routeDiagramId = (location.state as { diagramId?: number } | null)?.diagramId;
@@ -458,7 +475,9 @@ export const EditorPage: React.FC = () => {
       setStatusMessage('Добавление связей через canvas пока поддерживается только для flowchart');
       return;
     }
+    setEdgePickActive(true);
     setEdgeAddModeFrom(null);
+    dispatch(clearSelectedElement());
     setStatusMessage('Режим добавления связи: кликни узел-источник, затем узел-цель');
   };
 
@@ -476,23 +495,31 @@ export const EditorPage: React.FC = () => {
   };
 
   const handleCanvasNodeSelect = (id: string | null): void => {
-    setSelectedNodeId(id);
     if (!id) {
+      dispatch(clearSelectedElement());
+      if (edgePickActive) {
+        setEdgePickActive(false);
+        setEdgeAddModeFrom(null);
+      }
       return;
     }
-    // Edge creation mode: first click picks source, second click picks target.
-    if (edgeAddModeFrom === null) {
-      setEdgeAddModeFrom(id);
-      setStatusMessage(`Источник связи: "${id}". Теперь кликни узел-цель.`);
+    if (edgePickActive) {
+      if (edgeAddModeFrom === null) {
+        setEdgeAddModeFrom(id);
+        setStatusMessage(`Источник связи: "${id}". Теперь кликни узел-цель.`);
+        return;
+      }
+      if (edgeAddModeFrom === id) {
+        setStatusMessage('Источник и цель не должны совпадать');
+        return;
+      }
+      setEdgeDraft({ from: edgeAddModeFrom, to: id });
+      setShowAddEdgeDialog(true);
+      setEdgeAddModeFrom(null);
+      setEdgePickActive(false);
       return;
     }
-    if (edgeAddModeFrom === id) {
-      setStatusMessage('Источник и цель не должны совпадать');
-      return;
-    }
-    setEdgeDraft({ from: edgeAddModeFrom, to: id });
-    setShowAddEdgeDialog(true);
-    setEdgeAddModeFrom(null);
+    dispatch(setSelectedNode(id));
   };
 
   const handleCreateEdge = (payload: { label: string }): void => {
@@ -503,6 +530,7 @@ export const EditorPage: React.FC = () => {
     setSource((prev) => `${prev.trimEnd()}\n  ${edgeLine}`);
     setShowAddEdgeDialog(false);
     setEdgeDraft(null);
+    setEdgePickActive(false);
     setStatusMessage(`Добавлена связь ${edgeDraft.from} -> ${edgeDraft.to}`);
   };
 
@@ -541,7 +569,7 @@ export const EditorPage: React.FC = () => {
         minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        padding: '16px',
+        padding: '6px 16px 28px 16px',
         gap: '0',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
         background: '#ffffff',
@@ -641,70 +669,86 @@ export const EditorPage: React.FC = () => {
         </div>
       ) : null}
 
-      <div style={{ display: 'flex', gap: '0', flex: 1 }}>
-        <SidePanel
-          diagrams={diagramItems}
-          selectedDiagramId={selectedDiagramId}
-          versions={versions}
-          selectedVersionId={selectedVersionId}
-          onSelectDiagram={(diagramId) => {
-            dispatch(setSelectedDiagramId(diagramId));
-            if (diagramId === null) {
-              dispatch(clearVersions());
-              setSelectedVersionId(null);
-              setStatusMessage('Режим новой диаграммы');
-              return;
-            }
-            void loadDiagramById(diagramId);
-          }}
-          onCreateDiagram={() => {
-            void handleCreateDiagram();
-          }}
-          onLoadVersions={() => {
-            void loadVersionsForCurrentDiagram();
-          }}
-          onSelectVersion={handleSelectVersion}
-          onRestoreSelectedVersion={() => {
-            void restoreSelectedVersion();
-          }}
-          diagramType={currentDiagramType}
-          onDiagramTypeChange={handleSelectDiagramType}
-          onAddNode={() => beginAddNode()}
-          onAddEdge={beginAddEdge}
-          onOpenFile={openFile}
-          onSaveCode={() => {
-            downloadTextFile('diagram.mmd', source);
-            setStatusMessage('Код сохранен');
-          }}
-          onSaveSvg={saveAsSvg}
-          onSaveImage={() => {
-            void saveAsPng();
-          }}
-          onSaveVersion={() => {
-            void saveVersionToServer();
-          }}
-          onRestore={() => {
-            void restoreFromServer();
-          }}
-          isSyncing
-        />
-        <CodeEditor
-          value={source}
-          onChange={setSource}
-          onOpenFile={openFile}
-          onSaveCode={() => {
-            downloadTextFile('diagram.mmd', source);
-            setStatusMessage('Код сохранен');
-          }}
-          onGenerateFromCanvas={() => {
-            setStatusMessage('Генерация кода из холста будет добавлена отдельно');
-          }}
-          isSynced
-        />
-
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <ResizableEditorLayout
+          sidebarPanelRef={sidebarPanelRef}
+          sidebar={
+            <SidePanel
+              collapsed={sidebarCollapsed}
+              onCollapseSidebar={() => {
+                sidebarPanelRef.current?.collapse();
+                setSidebarCollapsed(true);
+              }}
+              onExpandSidebar={() => {
+                sidebarPanelRef.current?.expand();
+                setSidebarCollapsed(false);
+              }}
+              diagrams={diagramItems}
+              selectedDiagramId={selectedDiagramId}
+              versions={versions}
+              selectedVersionId={selectedVersionId}
+              onSelectDiagram={(diagramId) => {
+                dispatch(setSelectedDiagramId(diagramId));
+                if (diagramId === null) {
+                  dispatch(clearVersions());
+                  setSelectedVersionId(null);
+                  setStatusMessage('Режим новой диаграммы');
+                  return;
+                }
+                void loadDiagramById(diagramId);
+              }}
+              onCreateDiagram={() => {
+                void handleCreateDiagram();
+              }}
+              onLoadVersions={() => {
+                void loadVersionsForCurrentDiagram();
+              }}
+              onSelectVersion={handleSelectVersion}
+              onRestoreSelectedVersion={() => {
+                void restoreSelectedVersion();
+              }}
+              diagramType={currentDiagramType}
+              onDiagramTypeChange={handleSelectDiagramType}
+              onAddNode={() => beginAddNode()}
+              onAddEdge={beginAddEdge}
+              onOpenFile={openFile}
+              onSaveCode={() => {
+                downloadTextFile('diagram.mmd', source);
+                setStatusMessage('Код сохранен');
+              }}
+              onSaveSvg={saveAsSvg}
+              onSaveImage={() => {
+                void saveAsPng();
+              }}
+              onSaveVersion={() => {
+                void saveVersionToServer();
+              }}
+              onRestore={() => {
+                void restoreFromServer();
+              }}
+              isSyncing
+            />
+          }
+          code={
+            <CodeEditor
+              value={source}
+              onChange={setSource}
+              onOpenFile={openFile}
+              onSaveCode={() => {
+                downloadTextFile('diagram.mmd', source);
+                setStatusMessage('Код сохранен');
+              }}
+              onGenerateFromCanvas={() => {
+                setStatusMessage('Генерация кода из холста будет добавлена отдельно');
+              }}
+              isSynced
+            />
+          }
+          canvas={
         <div
           style={{
             flex: 1,
+            minHeight: 0,
             display: 'flex',
             flexDirection: 'column',
             borderRadius: '8px',
@@ -771,7 +815,7 @@ export const EditorPage: React.FC = () => {
           <div
             style={{
               flex: 1,
-              minHeight: '320px',
+              minHeight: 0,
               overflow: 'auto',
             }}
           >
@@ -781,8 +825,13 @@ export const EditorPage: React.FC = () => {
                 canvasId="diagram-canvas"
                 zoomCommand={{ type: zoomType, nonce: zoomNonce }}
                 disableNodeDrag={currentDiagramType === 'sequence'}
-                selectedNodeId={selectedNodeId ?? undefined}
+                selectedNodeId={selectedCanvasNodeId ?? undefined}
+                selectedEdgeIndex={selectedCanvasEdgeIndex}
                 onSelectNode={handleCanvasNodeSelect}
+                onSelectEdge={(idx) => {
+                  if (idx === null) return;
+                  dispatch(setSelectedEdge(idx));
+                }}
                 onNodeDoubleClick={(id) => {
                   if (currentDiagramType !== 'flowchart') return;
                   setEditingNodeId(id);
@@ -791,9 +840,9 @@ export const EditorPage: React.FC = () => {
                   if (currentDiagramType !== 'flowchart') return;
                   setEditingEdge(edge);
                 }}
-                onNodePositionChange={(id, x, y) => {
+                onNodePositionChange={(id, x, y, size) => {
                   setSource((prevSource) => {
-                    const nextSource = upsertLayoutHint(prevSource, id, x, y);
+                    const nextSource = upsertLayoutHint(prevSource, id, x, y, size);
                     return nextSource === prevSource ? prevSource : nextSource;
                   });
                   setStatusMessage(`Обновлен layout-хинт для узла "${id}"`);
@@ -838,17 +887,31 @@ export const EditorPage: React.FC = () => {
             </div>
           </div>
         </div>
+          }
+          properties={
+            hasCanvasSelection ? (
+              <PropertiesPanel
+                diagramType={currentDiagramType}
+                model={parsed.model}
+                source={source}
+                onSourceChange={setSource}
+              />
+            ) : null
+          }
+        />
       </div>
       <div
         style={{
           background: '#1f2937',
           color: '#d1d5db',
-          padding: '8px 24px',
+          padding: '10px 24px 12px',
+          marginTop: 12,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           fontSize: 12,
           borderRadius: 10,
+          flexShrink: 0,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -874,6 +937,8 @@ export const EditorPage: React.FC = () => {
           onCancel={() => {
             setShowAddEdgeDialog(false);
             setEdgeDraft(null);
+            setEdgePickActive(false);
+            setEdgeAddModeFrom(null);
           }}
           onSubmit={handleCreateEdge}
         />

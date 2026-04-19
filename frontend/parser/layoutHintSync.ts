@@ -1,6 +1,8 @@
 interface LayoutPoint {
   x: number;
   y: number;
+  width?: number;
+  height?: number;
 }
 
 interface LayoutDocument {
@@ -42,15 +44,37 @@ function extractHintBlock(lines: string[]): HintBlock | null {
   return null;
 }
 
+function mergeLayoutPoint(
+  prev: LayoutPoint | undefined,
+  x: number,
+  y: number,
+  size?: { width?: number; height?: number },
+): LayoutPoint {
+  const next: LayoutPoint = {
+    x: Math.round(x),
+    y: Math.round(y),
+  };
+  if (size?.width !== undefined) next.width = Math.round(size.width);
+  else if (prev?.width !== undefined) next.width = prev.width;
+  if (size?.height !== undefined) next.height = Math.round(size.height);
+  else if (prev?.height !== undefined) next.height = prev.height;
+  return next;
+}
+
 export function upsertLayoutHint(
   source: string,
   nodeId: string,
   x: number,
   y: number,
+  size?: { width?: number; height?: number },
 ): string {
   const lines = source.split(/\r?\n/);
   const block = extractHintBlock(lines);
-  const nextPoint: LayoutPoint = { x: Math.round(x), y: Math.round(y) };
+  const prevPoint =
+    block?.json.layout?.[nodeId] !== undefined
+      ? (block.json.layout![nodeId] as LayoutPoint)
+      : undefined;
+  const nextPoint = mergeLayoutPoint(prevPoint, x, y, size);
 
   if (block) {
     const nextJson: LayoutDocument = { ...block.json };
@@ -67,4 +91,18 @@ export function upsertLayoutHint(
   const nextJson: LayoutDocument = { layout: { [nodeId]: nextPoint } };
   const hintLine = `%% ${JSON.stringify(nextJson)}`;
   return source.trimEnd() ? `${source.trimEnd()}\n${hintLine}` : hintLine;
+}
+
+/** Обновить размеры узла в layout-хинте; якорь x/y — текущая позиция на холсте. */
+export function upsertLayoutSize(
+  source: string,
+  nodeId: string,
+  width: number,
+  height: number,
+  anchor: { x: number; y: number },
+): string {
+  return upsertLayoutHint(source, nodeId, anchor.x, anchor.y, {
+    width,
+    height,
+  });
 }

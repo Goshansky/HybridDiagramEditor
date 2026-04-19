@@ -12,8 +12,15 @@ interface DiagramCanvasProps {
     nonce: number;
   };
   selectedNodeId?: string;
+  selectedEdgeIndex?: number | null;
   onSelectNode?: (id: string | null) => void;
-  onNodePositionChange?: (id: string, x: number, y: number) => void;
+  onSelectEdge?: (edgeIndex: number | null) => void;
+  onNodePositionChange?: (
+    id: string,
+    x: number,
+    y: number,
+    size?: { width: number; height: number },
+  ) => void;
   disableNodeDrag?: boolean;
   onNodeDoubleClick?: (id: string) => void;
   onEdgeDoubleClick?: (edge: { from: string; to: string; label?: string; type: 'arrow' | 'line' }) => void;
@@ -28,9 +35,12 @@ interface PositionedNode {
   styles: Record<string, string>;
   x: number;
   y: number;
+  width: number;
+  height: number;
 }
 
 interface PositionedEdge {
+  edgeIndex: number;
   from: string;
   to: string;
   label?: string;
@@ -42,6 +52,10 @@ interface PositionedEdge {
   fromY: number;
   toX: number;
   toY: number;
+  fromW: number;
+  fromH: number;
+  toW: number;
+  toH: number;
 }
 
 const NODE_WIDTH = 110;
@@ -104,7 +118,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   canvasId = 'diagram-canvas',
   zoomCommand,
   selectedNodeId,
+  selectedEdgeIndex = null,
   onSelectNode,
+  onSelectEdge,
   onNodePositionChange,
   disableNodeDrag = false,
   onNodeDoubleClick,
@@ -245,20 +261,27 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       styles: n.styles ?? {},
       x: layout[n.id]?.x ?? 0,
       y: layout[n.id]?.y ?? 0,
+      width: typeof n.width === 'number' && n.width > 0 ? n.width : NODE_WIDTH,
+      height: typeof n.height === 'number' && n.height > 0 ? n.height : NODE_HEIGHT,
     }));
 
     const nodeById = new Map<string, PositionedNode>(
       positionedNodes.map((n) => [n.id, n]),
     );
 
-    const positionedEdges: PositionedEdge[] = model.edges.map((e) => {
+    const positionedEdges: PositionedEdge[] = model.edges.map((e, edgeIndex) => {
       const from = nodeById.get(e.from);
       const to = nodeById.get(e.to);
       const fromX = from?.x ?? 0;
       const fromY = from?.y ?? 0;
       const toX = to?.x ?? 0;
       const toY = to?.y ?? 0;
+      const fromW = from?.width ?? NODE_WIDTH;
+      const fromH = from?.height ?? NODE_HEIGHT;
+      const toW = to?.width ?? NODE_WIDTH;
+      const toH = to?.height ?? NODE_HEIGHT;
       return {
+        edgeIndex,
         from: e.from,
         to: e.to,
         label: e.label,
@@ -270,16 +293,17 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         fromY,
         toX,
         toY,
+        fromW,
+        fromH,
+        toW,
+        toH,
       };
     });
 
     // --- edges data join ---
     const edgeSelection = edgesG
       .selectAll<SVGGElement, PositionedEdge>('g.edge')
-      .data(
-        positionedEdges,
-        (d) => `${d?.from ?? ''}-${d?.to ?? ''}-${d?.label ?? ''}`,
-      );
+      .data(positionedEdges, (d) => String(d.edgeIndex));
 
     const edgeEnter = edgeSelection
       .enter()
@@ -290,7 +314,17 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .append('line')
       .attr('class', 'edge-line')
       .attr('stroke', '#4b5563')
-      .attr('stroke-width', 2);
+      .attr('stroke-width', 2)
+      .style('pointer-events', 'none');
+
+    edgeEnter
+      .append('line')
+      .attr('class', 'edge-hit')
+      .attr('stroke', 'transparent')
+      .attr('stroke-width', 22)
+      .attr('stroke-linecap', 'round')
+      .style('pointer-events', 'stroke')
+      .style('cursor', 'pointer');
 
     edgeEnter
       .append('text')
@@ -301,30 +335,48 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .style('fill', '#374151');
 
     const edgeMerge = edgeEnter.merge(edgeSelection);
+    edgeMerge.each(function ensureEdgeHit(this: SVGGElement) {
+      const g = d3.select(this);
+      if (!g.select('line.edge-hit').empty()) return;
+      g.insert('line', 'text')
+        .attr('class', 'edge-hit')
+        .attr('stroke', 'transparent')
+        .attr('stroke-width', 22)
+        .attr('stroke-linecap', 'round')
+        .style('pointer-events', 'stroke')
+        .style('cursor', 'pointer');
+      g.select('line.edge-line').style('pointer-events', 'none');
+    });
+    edgeMerge.on('click', (event, d) => {
+      event.stopPropagation();
+      onSelectEdge?.(d.edgeIndex);
+    });
     edgeMerge.on('dblclick', (event, d) => {
       event.stopPropagation();
       onEdgeDoubleClick?.({ from: d.from, to: d.to, label: d.label, type: d.type });
     });
 
-    edgeMerge.select<SVGLineElement>('line.edge-line').attr('x1', (d) => {
-      const { x1 } = computeEdgeEndpoints(d);
-      return x1;
-    })
-      .attr('y1', (d) => {
-        const { y1 } = computeEdgeEndpoints(d);
-        return y1;
-      })
-      .attr('x2', (d) => {
-        const { x2 } = computeEdgeEndpoints(d);
-        return x2;
-      })
-      .attr('y2', (d) => {
-        const { y2 } = computeEdgeEndpoints(d);
-        return y2;
-      })
+    const applyEdgeLineCoords = (
+      sel: d3.Selection<SVGLineElement, PositionedEdge, SVGGElement, unknown>,
+    ): void => {
+      sel.each(function (d: PositionedEdge) {
+        const { x1, y1, x2, y2 } = computeEdgeEndpoints(d);
+        d3.select(this).attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2);
+      });
+    };
+
+    applyEdgeLineCoords(edgeMerge.select<SVGLineElement>('line.edge-line'));
+    edgeMerge
+      .select<SVGLineElement>('line.edge-line')
       .attr('marker-end', (d) =>
         d.type === 'arrow' ? 'url(#edge-arrowhead)' : null,
-      );
+      )
+      .attr('stroke', (d) =>
+        selectedEdgeIndex === d.edgeIndex ? '#4f46e5' : '#4b5563',
+      )
+      .attr('stroke-width', (d) => (selectedEdgeIndex === d.edgeIndex ? 3 : 2));
+
+    applyEdgeLineCoords(edgeMerge.select<SVGLineElement>('line.edge-hit'));
 
     edgeMerge
       .select<SVGTextElement>('text.edge-label')
@@ -359,10 +411,15 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
       lifeSelection.exit().remove();
 
+      const seqY = (_d: PositionedEdge, i: number) => 130 + i * 48;
       edgeMerge
         .select<SVGLineElement>('line.edge-line')
-        .attr('y1', (_d, i) => 130 + i * 48)
-        .attr('y2', (_d, i) => 130 + i * 48);
+        .attr('y1', seqY)
+        .attr('y2', seqY);
+      edgeMerge
+        .select<SVGLineElement>('line.edge-hit')
+        .attr('y1', seqY)
+        .attr('y2', seqY);
       edgeMerge
         .select<SVGTextElement>('text.edge-label')
         .attr('y', (_d, i) => 130 + i * 48 - 10);
@@ -400,39 +457,40 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       >('rect,polygon,circle,ellipse,path')
         .remove();
 
+      const w = d.width;
+      const h = d.height;
+
       if (d.shape === 'diamond') {
-        const w = NODE_WIDTH;
-        const h = NODE_HEIGHT;
         g.insert('polygon', 'text')
           .attr(
             'points',
             `0,${-h / 2} ${w / 2},0 0,${h / 2} ${-w / 2},0`,
           );
       } else if (d.shape === 'circle') {
-        g.insert('circle', 'text').attr('r', NODE_HEIGHT / 2);
+        g.insert('circle', 'text').attr('r', Math.min(w, h) / 2);
       } else if (d.shape === 'oval') {
-        g.insert('ellipse', 'text').attr('rx', NODE_WIDTH / 2).attr('ry', NODE_HEIGHT / 2);
+        g.insert('ellipse', 'text').attr('rx', w / 2).attr('ry', h / 2);
       } else if (d.shape === 'parallelogram') {
-        const w = NODE_WIDTH;
-        const h = NODE_HEIGHT;
-        const skew = 16;
+        const skew = Math.min(16, w * 0.12);
         g.insert('polygon', 'text').attr(
           'points',
           `${-w / 2 + skew},${-h / 2} ${w / 2},${-h / 2} ${w / 2 - skew},${h / 2} ${-w / 2},${h / 2}`,
         );
       } else if (d.shape === 'cloud') {
+        const sx = w / 90;
+        const sy = h / 46;
         g.insert('path', 'text')
           .attr(
             'd',
             'M -45 -14 C -50 -28,-20 -32,-10 -20 C 0 -34,25 -32,28 -16 C 42 -22,52 -4,40 8 C 52 24,30 34,14 26 C 6 36,-18 36,-24 24 C -40 30,-56 14,-44 0 C -56 -6,-56 -20,-45 -14 Z',
           )
-          .attr('transform', 'scale(1.2 1.1)');
+          .attr('transform', `scale(${sx} ${sy})`);
       } else {
         g.insert('rect', 'text')
-          .attr('x', -NODE_WIDTH / 2)
-          .attr('y', -NODE_HEIGHT / 2)
-          .attr('width', NODE_WIDTH)
-          .attr('height', NODE_HEIGHT)
+          .attr('x', -w / 2)
+          .attr('y', -h / 2)
+          .attr('width', w)
+          .attr('height', h)
           .attr('rx', 6)
           .attr('ry', 6);
       }
@@ -450,7 +508,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .attr('stroke', (d) =>
         d.id === selectedNodeId ? '#4f46e5' : d.styles.stroke ?? '#4f46e5',
       )
-      .attr('stroke-width', (d) => (d.id === selectedNodeId ? 2.5 : 1.5));
+      .attr('stroke-width', (d) => nodeStrokeWidthPx(d, selectedNodeId));
 
     nodeSelection.exit().remove();
 
@@ -483,8 +541,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
             SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
           >('rect,polygon,circle,ellipse,path')
           .attr('opacity', 1)
-          .attr('stroke-width', (n) => (n.id === selectedNodeId ? 2.5 : 1.5));
-        onNodePositionChange?.(d.id, d.x, d.y);
+          .attr('stroke-width', (n) => nodeStrokeWidthPx(n, selectedNodeId));
+        onNodePositionChange?.(d.id, d.x, d.y, { width: d.width, height: d.height });
       });
 
     nodeMerge
@@ -501,11 +559,23 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     }
 
     // клик по фону снимает выделение
-    svgSelection
-      .on('click', () => {
-        onSelectNode?.(null);
-      });
-  }, [model, width, height, onNodePositionChange, onSelectNode, selectedNodeId, disableNodeDrag, onNodeDoubleClick, onEdgeDoubleClick]);
+    svgSelection.on('click', () => {
+      onSelectNode?.(null);
+      onSelectEdge?.(null);
+    });
+  }, [
+    model,
+    width,
+    height,
+    onNodePositionChange,
+    onSelectNode,
+    onSelectEdge,
+    selectedNodeId,
+    selectedEdgeIndex,
+    disableNodeDrag,
+    onNodeDoubleClick,
+    onEdgeDoubleClick,
+  ]);
 
   return (
     <svg
@@ -535,9 +605,8 @@ function computeEdgeEndpoints(edge: PositionedEdge): {
   const dy = toY - fromY;
   const length = Math.sqrt(dx * dx + dy * dy) || 1;
 
-  // Отступ считаем по форме узла, чтобы наконечник стрелки не прятался под узел.
-  const padStart = getNodeRadiusAlongEdge(edge.fromShape);
-  const padEnd = getNodeRadiusAlongEdge(edge.toShape);
+  const padStart = getNodeRadiusAlongEdge(edge.fromShape, edge.fromW, edge.fromH);
+  const padEnd = getNodeRadiusAlongEdge(edge.toShape, edge.toW, edge.toH);
 
   const nx = dx / length;
   const ny = dy / length;
@@ -550,11 +619,35 @@ function computeEdgeEndpoints(edge: PositionedEdge): {
   return { x1, y1, x2, y2 };
 }
 
-function getNodeRadiusAlongEdge(shape: NodeShape): number {
-  if (shape === 'circle') {
-    return NODE_HEIGHT / 2;
+function parseStyleStrokeWidthPx(styles: Record<string, string>): number | null {
+  const raw = styles['stroke-width'] ?? styles.strokeWidth;
+  if (raw === undefined || raw === '') return null;
+  const n = Number.parseFloat(String(raw).replace(/px/gi, '').trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+function nodeStrokeWidthPx(
+  d: PositionedNode,
+  selectedId: string | undefined,
+): number {
+  const fromStyle = parseStyleStrokeWidthPx(d.styles);
+  const base = fromStyle ?? 1.5;
+  if (d.id === selectedId) {
+    return Math.max(base, 2.5);
   }
-  // Для прямоугольника/ромба берем половину ширины как безопасную оценку.
-  return NODE_WIDTH / 2;
+  return base;
+}
+
+function getNodeRadiusAlongEdge(shape: NodeShape, w: number, h: number): number {
+  if (shape === 'circle') {
+    return Math.min(w, h) / 2;
+  }
+  if (shape === 'diamond') {
+    return Math.min(w, h) * 0.45;
+  }
+  if (shape === 'oval') {
+    return Math.max(w / 2, h / 2) * 0.9;
+  }
+  return Math.max(w, h) / 2;
 }
 
