@@ -30,6 +30,8 @@ interface DiagramState {
   currentDiagramType: DiagramType;
   projects: ProjectItem[];
   versions: DiagramVersionItem[];
+  /** false после ручного перетаскивания узла / правки layout-хинта; dagre не пересчитывает граф. */
+  useAutoLayout: boolean;
 }
 
 const initialState: DiagramState = {
@@ -38,6 +40,7 @@ const initialState: DiagramState = {
   currentDiagramType: 'flowchart',
   projects: [],
   versions: [],
+  useAutoLayout: true,
 };
 
 const diagramSlice = createSlice({
@@ -113,6 +116,15 @@ const diagramSlice = createSlice({
     clearVersions(state) {
       state.versions = [];
     },
+    setUseAutoLayout(state, action: PayloadAction<boolean>) {
+      state.useAutoLayout = action.payload;
+    },
+    disableAutoLayout(state) {
+      state.useAutoLayout = false;
+    },
+    enableAutoLayout(state) {
+      state.useAutoLayout = true;
+    },
   },
 });
 
@@ -126,5 +138,8 @@ export const {
   removeProject,
   setVersions,
   clearVersions,
+  setUseAutoLayout,
+  disableAutoLayout,
+  enableAutoLayout,
 } = diagramSlice.actions;
 export const diagramReducer = diagramSlice.reducer;

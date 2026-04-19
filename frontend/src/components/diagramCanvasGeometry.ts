@@ -189,3 +189,22 @@ export function computeEdgeEndpointsBetweenNodes(
 
   return { x1: pStart.x, y1: pStart.y, x2, y2 };
 }
+
+/** Укорачивает последний сегмент полилинии на gap (для маркера стрелки на path). */
+export function trimPolylineEndForArrow(
+  points: Array<{ x: number; y: number }>,
+  gap: number,
+): Array<{ x: number; y: number }> {
+  if (points.length < 2 || gap <= 0) return points;
+  const out = points.map((p) => ({ x: p.x, y: p.y }));
+  const n = out.length;
+  const a = out[n - 2];
+  const b = out[n - 1];
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-9) return out;
+  const t = Math.max(0, (len - gap) / len);
+  out[n - 1] = { x: a.x + dx * t, y: a.y + dy * t };
+  return out;
+}

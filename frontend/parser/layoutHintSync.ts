@@ -61,6 +61,31 @@ function mergeLayoutPoint(
   return next;
 }
 
+/** Есть ли в коде блок layout с координатами хотя бы одного узла. */
+export function sourceHasLayoutPositionHints(source: string): boolean {
+  const lines = source.split(/\r?\n/);
+  const block = extractHintBlock(lines);
+  const layout = block?.json.layout;
+  if (!layout || typeof layout !== 'object') return false;
+  return Object.values(layout).some((p) => {
+    if (!p || typeof p !== 'object') return false;
+    const o = p as Record<string, unknown>;
+    return typeof o.x === 'number' && typeof o.y === 'number';
+  });
+}
+
+/** Удаляет блок %% { ... } с layout-хинтом (если есть). */
+export function stripLayoutHintsFromSource(source: string): string {
+  const lines = source.split(/\r?\n/);
+  const block = extractHintBlock(lines);
+  if (!block) return source;
+  const nextLines = [
+    ...lines.slice(0, block.startLine),
+    ...lines.slice(block.endLine + 1),
+  ];
+  return nextLines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+}
+
 export function upsertLayoutHint(
   source: string,
   nodeId: string,

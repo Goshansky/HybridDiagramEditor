@@ -6,6 +6,7 @@ import {
   ChevronDown,
   FolderOpen,
   GitBranch,
+  LayoutGrid,
   Link2,
   Maximize,
   MoreVertical,
@@ -16,7 +17,12 @@ import {
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
-import { parseMermaidByType, upsertLayoutHint } from '../../parser';
+import {
+  parseMermaidByType,
+  sourceHasLayoutPositionHints,
+  stripLayoutHintsFromSource,
+  upsertLayoutHint,
+} from '../../parser';
 import { AddEdgeDialog } from '../components/AddEdgeDialog';
 import { AddNodeDialog, type FlowNodeShape } from '../components/AddNodeDialog';
 import { CodeEditor } from '../components/CodeEditor';
@@ -38,6 +44,7 @@ import {
 } from '../services/diagramApi';
 import {
   clearVersions,
+  enableAutoLayout,
   setDiagrams,
   setCurrentDiagramType,
   setSelectedDiagramId,
@@ -56,8 +63,7 @@ import {
 const initialExample = `graph TD
   A[Начало] --> B{Условие}
   B -->|Да| C[Действие 1]
-  B -->|Нет| D[Действие 2]
-  %% { "layout": { "A": { "x": 100, "y": 50 }, "B": { "x": 250, "y": 150 } } }`;
+  B -->|Нет| D[Действие 2]`;
 
 export const EditorPage: React.FC = () => {
   const [source, setSource] = useState(initialExample);
@@ -101,6 +107,7 @@ export const EditorPage: React.FC = () => {
     try {
       const diagram = await getDiagram(diagramId);
       setSource(diagram.content);
+      dispatch(enableAutoLayout());
       dispatch(setCurrentDiagramType(diagram.diagram_type));
       setSelectedVersionId(null);
       dispatch(clearVersions());
@@ -116,7 +123,7 @@ export const EditorPage: React.FC = () => {
   const parsed = useMemo(() => {
     try {
       return {
-        model: parseMermaidByType(source, currentDiagramType),
+        model: parseMermaidByType(source, currentDiagramType, true),
         error: null as string | null,
       };
     } catch (e) {
@@ -320,6 +327,7 @@ export const EditorPage: React.FC = () => {
     try {
       const diagram = await getDiagram(selectedDiagramId);
       setSource(diagram.content);
+      dispatch(enableAutoLayout());
       setStatusMessage(`Загружена сохраненная версия "${diagram.name}"`);
     } catch (error) {
       const message = axios.isAxiosError(error)
@@ -362,6 +370,7 @@ export const EditorPage: React.FC = () => {
     const selected = versions.find((version) => version.id === versionId);
     if (!selected) return;
     setSource(selected.content);
+    dispatch(enableAutoLayout());
     setStatusMessage(`Загружен предпросмотр версии v${selected.versionNumber}`);
   };
 
@@ -380,6 +389,7 @@ export const EditorPage: React.FC = () => {
         content: selected.content,
       });
       setSource(updated.content);
+      dispatch(enableAutoLayout());
       dispatch(
         upsertDiagram({
           id: updated.id,
@@ -407,6 +417,7 @@ export const EditorPage: React.FC = () => {
     );
     dispatch(setCurrentDiagramType(diagramType));
     if (applyTemplate) {
+      dispatch(enableAutoLayout());
       setSource(getTemplateByDiagramType(diagramType));
       setStatusMessage(`Выбран тип "${diagramType}", загружен шаблон`);
     } else {
@@ -449,6 +460,7 @@ export const EditorPage: React.FC = () => {
       );
       dispatch(setCurrentDiagramType(created.diagram_type));
       dispatch(setSelectedDiagramId(created.id));
+      dispatch(enableAutoLayout());
       setSource(created.content || template);
       setSelectedVersionId(null);
       dispatch(clearVersions());
@@ -527,6 +539,7 @@ export const EditorPage: React.FC = () => {
     const edgeLine = payload.label
       ? `${edgeDraft.from} -->|${payload.label}| ${edgeDraft.to}`
       : `${edgeDraft.from} --> ${edgeDraft.to}`;
+    dispatch(enableAutoLayout());
     setSource((prev) => `${prev.trimEnd()}\n  ${edgeLine}`);
     setShowAddEdgeDialog(false);
     setEdgeDraft(null);
@@ -536,6 +549,7 @@ export const EditorPage: React.FC = () => {
 
   const handleNodeEditSave = (payload: { label: string; shape: FlowNodeShape }): void => {
     if (!editingNodeId) return;
+    dispatch(enableAutoLayout());
     setSource((prev) => replaceNodeDefinition(prev, editingNodeId, payload.label, payload.shape));
     setEditingNodeId(null);
     setStatusMessage(`Узел "${editingNodeId}" обновлен`);
@@ -543,6 +557,7 @@ export const EditorPage: React.FC = () => {
 
   const handleEdgeEditSave = (payload: { label: string }): void => {
     if (!editingEdge) return;
+    dispatch(enableAutoLayout());
     setSource((prev) => replaceEdgeDefinition(prev, editingEdge, payload.label));
     setStatusMessage(`Связь ${editingEdge.from} -> ${editingEdge.to} обновлена`);
     setEditingEdge(null);
@@ -559,8 +574,27 @@ export const EditorPage: React.FC = () => {
     }
     const text = await file.text();
     setSource(text);
+    dispatch(enableAutoLayout());
     setStatusMessage(`Файл "${file.name}" открыт`);
     event.target.value = '';
+  };
+
+  const handleCodeEditorChange = (text: string): void => {
+    dispatch(enableAutoLayout());
+    setSource(text);
+  };
+
+  const layoutHintsInSource =
+    currentDiagramType === 'flowchart' && sourceHasLayoutPositionHints(source);
+
+  const handleRestoreAutoLayout = (): void => {
+    if (currentDiagramType !== 'flowchart') {
+      setStatusMessage('Автораскладка доступна только для flowchart');
+      return;
+    }
+    dispatch(enableAutoLayout());
+    setSource((prev) => stripLayoutHintsFromSource(prev));
+    setStatusMessage('Включена автораскладка: хинты позиций удалены из кода');
   };
 
   return (
@@ -732,7 +766,7 @@ export const EditorPage: React.FC = () => {
           code={
             <CodeEditor
               value={source}
-              onChange={setSource}
+              onChange={handleCodeEditorChange}
               onOpenFile={openFile}
               onSaveCode={() => {
                 downloadTextFile('diagram.mmd', source);
@@ -783,6 +817,33 @@ export const EditorPage: React.FC = () => {
                 </button>
                 <button style={canvasIconButtonStyle} onClick={() => triggerZoom('reset')} title="Вписать в экран">
                   <Maximize size={16} color="#4b5563" />
+                </button>
+              </div>
+              <div style={canvasToolbarGroupStyle}>
+                <button
+                  type="button"
+                  style={{
+                    ...canvasIconButtonStyle,
+                    gap: 6,
+                    paddingLeft: 10,
+                    paddingRight: 10,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: layoutHintsInSource ? '#4f46e5' : '#6b7280',
+                    background: layoutHintsInSource ? 'rgba(79, 70, 229, 0.1)' : undefined,
+                    boxShadow: layoutHintsInSource
+                      ? '0 0 0 2px rgba(79, 70, 229, 0.5), inset 0 1px 0 rgba(255,255,255,0.6)'
+                      : 'none',
+                  }}
+                  onClick={handleRestoreAutoLayout}
+                  title={
+                    layoutHintsInSource
+                      ? 'В коде есть ручные координаты (накладываются на dagre). Нажми — убрать хинты и пересчитать всё заново'
+                      : 'Автораскладка dagre без ручных поправок'
+                  }
+                >
+                  <LayoutGrid size={16} color={layoutHintsInSource ? '#4f46e5' : '#9ca3af'} />
+                  <span>Автораскладка</span>
                 </button>
               </div>
               <div style={canvasToolbarGroupStyle}>

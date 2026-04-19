@@ -1,5 +1,10 @@
 import { type DiagramModel } from './model';
-import { upsertLayoutHint, upsertLayoutSize } from './layoutHintSync';
+import {
+  sourceHasLayoutPositionHints,
+  stripLayoutHintsFromSource,
+  upsertLayoutHint,
+  upsertLayoutSize,
+} from './layoutHintSync';
 import { parseFlowchart } from './flowchart';
 import { parseClassDiagram } from './classDiagram';
 import { parseSequenceDiagram } from './sequence';
@@ -7,17 +12,26 @@ import { parseErDiagram } from './erDiagram';
 
 export type DiagramType = 'flowchart' | 'class' | 'sequence' | 'er';
 
-export type { DiagramModel } from './model';
-export { upsertLayoutHint, upsertLayoutSize };
+export type { DiagramEdgePoint, DiagramModel } from './model';
+export {
+  sourceHasLayoutPositionHints,
+  stripLayoutHintsFromSource,
+  upsertLayoutHint,
+  upsertLayoutSize,
+};
 export * from './flowchartSync';
 
-export function parseMermaidFlowchart(source: string): DiagramModel {
-  return parseFlowchart(source);
+export function parseMermaidFlowchart(
+  source: string,
+  useAutoLayout = true,
+): DiagramModel {
+  return parseFlowchart(source, useAutoLayout);
 }
 
 export function parseMermaidByType(
   source: string,
   diagramType: DiagramType,
+  useAutoLayout = true,
 ): DiagramModel {
   if (diagramType === 'class') {
     return parseClassDiagram(source);
@@ -28,6 +42,6 @@ export function parseMermaidByType(
   if (diagramType === 'er') {
     return parseErDiagram(source);
   }
-  return parseFlowchart(source);
+  return parseFlowchart(source, useAutoLayout);
 }
 

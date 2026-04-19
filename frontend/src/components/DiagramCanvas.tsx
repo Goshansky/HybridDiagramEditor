@@ -2,7 +2,9 @@ import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import type { DiagramModel } from '../../parser';
 import {
+  ARROW_TIP_GAP,
   computeEdgeEndpointsBetweenNodes,
+  trimPolylineEndForArrow,
   type PositionedNodeLike,
 } from './diagramCanvasGeometry';
 
@@ -60,6 +62,8 @@ interface PositionedEdge {
   fromH: number;
   toW: number;
   toH: number;
+  /** Маршрут dagre; при live-drag не используется — только прямые границы. */
+  routePoints?: { x: number; y: number }[];
 }
 
 const NODE_WIDTH = 110;
@@ -134,6 +138,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   const rootGroupRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
   const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const zoomInitializedRef = useRef(false);
+  /** Пока тянем узел, ортогональные точки из dagre устаревают — рисуем рёбра по границам узлов. */
+  const edgeRoutingModeRef = useRef<'dagre' | 'live'>('dagre');
 
   // базовая инициализация zoom/pan
   useEffect(() => {
@@ -256,18 +262,26 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .attr('width', 4000)
       .attr('height', 4000);
 
-    const layout = computeLayout(model, width, height);
+    const fallbackLayout = computeLayout(model, width, height);
 
-    const positionedNodes: PositionedNode[] = model.nodes.map((n) => ({
-      id: n.id,
-      label: n.label ?? n.id,
-      shape: n.shape ?? 'rect',
-      styles: n.styles ?? {},
-      x: layout[n.id]?.x ?? 0,
-      y: layout[n.id]?.y ?? 0,
-      width: typeof n.width === 'number' && n.width > 0 ? n.width : NODE_WIDTH,
-      height: typeof n.height === 'number' && n.height > 0 ? n.height : NODE_HEIGHT,
-    }));
+    const positionedNodes: PositionedNode[] = model.nodes.map((n) => {
+      const hasXY =
+        typeof n.x === 'number' &&
+        typeof n.y === 'number' &&
+        Number.isFinite(n.x) &&
+        Number.isFinite(n.y);
+      const fb = fallbackLayout[n.id];
+      return {
+        id: n.id,
+        label: n.label ?? n.id,
+        shape: n.shape ?? 'rect',
+        styles: n.styles ?? {},
+        x: hasXY ? n.x! : (fb?.x ?? 0),
+        y: hasXY ? n.y! : (fb?.y ?? 0),
+        width: typeof n.width === 'number' && n.width > 0 ? n.width : NODE_WIDTH,
+        height: typeof n.height === 'number' && n.height > 0 ? n.height : NODE_HEIGHT,
+      };
+    });
 
     const nodeById = new Map<string, PositionedNode>(
       positionedNodes.map((n) => [n.id, n]),
@@ -301,6 +315,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         fromH,
         toW,
         toH,
+        routePoints: e.points,
       };
     });
 
@@ -315,15 +330,17 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .attr('class', 'edge');
 
     edgeEnter
-      .append('line')
+      .append('path')
       .attr('class', 'edge-line')
+      .attr('fill', 'none')
       .attr('stroke', '#4b5563')
       .attr('stroke-width', 2)
       .style('pointer-events', 'none');
 
     edgeEnter
-      .append('line')
+      .append('path')
       .attr('class', 'edge-hit')
+      .attr('fill', 'none')
       .attr('stroke', 'transparent')
       .attr('stroke-width', 22)
       .attr('stroke-linecap', 'round')
@@ -339,17 +356,24 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .style('fill', '#374151');
 
     const edgeMerge = edgeEnter.merge(edgeSelection);
-    edgeMerge.each(function ensureEdgeHit(this: SVGGElement) {
+    edgeMerge.each(function ensureEdgePaths(this: SVGGElement) {
       const g = d3.select(this);
-      if (!g.select('line.edge-hit').empty()) return;
-      g.insert('line', 'text')
+      if (!g.select('path.edge-line').empty()) return;
+      g.selectAll('line.edge-line, line.edge-hit').remove();
+      g.insert('path', 'text')
+        .attr('class', 'edge-line')
+        .attr('fill', 'none')
+        .attr('stroke', '#4b5563')
+        .attr('stroke-width', 2)
+        .style('pointer-events', 'none');
+      g.insert('path', 'text')
         .attr('class', 'edge-hit')
+        .attr('fill', 'none')
         .attr('stroke', 'transparent')
         .attr('stroke-width', 22)
         .attr('stroke-linecap', 'round')
         .style('pointer-events', 'stroke')
         .style('cursor', 'pointer');
-      g.select('line.edge-line').style('pointer-events', 'none');
     });
     edgeMerge.on('click', (event, d) => {
       event.stopPropagation();
@@ -369,42 +393,80 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       shape: n.shape,
     });
 
+    const routeLine = d3
+      .line<{ x: number; y: number }>()
+      .x((p) => p.x)
+      .y((p) => p.y)
+      .curve(d3.curveLinear);
+
     const refreshAllEdgeGraphics = (): void => {
       const seq = model.metadata.diagramType === 'sequence';
       edgeMerge.each(function (this: SVGGElement, d: PositionedEdge, i: number) {
         const from = nodeById.get(d.from);
         const to = nodeById.get(d.to);
         if (!from || !to) return;
-        let { x1, y1, x2, y2 } = computeEdgeEndpointsBetweenNodes(
+        const g = d3.select(this);
+        const setD = (pts: { x: number; y: number }[]): void => {
+          const pathD = routeLine(pts);
+          g.select<SVGPathElement>('path.edge-line').attr('d', pathD ?? '');
+          g.select<SVGPathElement>('path.edge-hit').attr('d', pathD ?? '');
+        };
+
+        if (seq) {
+          const { x1, y1, x2, y2 } = computeEdgeEndpointsBetweenNodes(
+            toGeom(from),
+            toGeom(to),
+            d.type,
+          );
+          const yy = 130 + i * 48;
+          const raw = [
+            { x: x1, y: yy },
+            { x: x2, y: yy },
+          ];
+          const pts =
+            d.type === 'arrow' ? trimPolylineEndForArrow(raw, ARROW_TIP_GAP) : raw;
+          setD(pts);
+          g.select<SVGTextElement>('text.edge-label')
+            .attr('x', (x1 + x2) / 2)
+            .attr('y', 130 + i * 48 - 10);
+          return;
+        }
+
+        const useDagre =
+          edgeRoutingModeRef.current === 'dagre' &&
+          d.routePoints &&
+          d.routePoints.length >= 2;
+
+        if (useDagre) {
+          let pts = d.routePoints!.map((p) => ({ x: p.x, y: p.y }));
+          if (d.type === 'arrow') {
+            pts = trimPolylineEndForArrow(pts, ARROW_TIP_GAP);
+          }
+          setD(pts);
+          const mid = pts[Math.floor(pts.length / 2)] ?? pts[0];
+          g.select<SVGTextElement>('text.edge-label')
+            .attr('x', mid.x)
+            .attr('y', mid.y - 6);
+          return;
+        }
+
+        const { x1, y1, x2, y2 } = computeEdgeEndpointsBetweenNodes(
           toGeom(from),
           toGeom(to),
           d.type,
         );
-        if (seq) {
-          const yy = 130 + i * 48;
-          y1 = yy;
-          y2 = yy;
-        }
-        const g = d3.select(this);
-        g.select<SVGLineElement>('line.edge-line')
-          .attr('x1', x1)
-          .attr('y1', y1)
-          .attr('x2', x2)
-          .attr('y2', y2);
-        g.select<SVGLineElement>('line.edge-hit')
-          .attr('x1', x1)
-          .attr('y1', y1)
-          .attr('x2', x2)
-          .attr('y2', y2);
-        const labelY = seq ? 130 + i * 48 - 10 : (y1 + y2) / 2 - 6;
+        setD([
+          { x: x1, y: y1 },
+          { x: x2, y: y2 },
+        ]);
         g.select<SVGTextElement>('text.edge-label')
           .attr('x', (x1 + x2) / 2)
-          .attr('y', labelY);
+          .attr('y', (y1 + y2) / 2 - 6);
       });
     };
 
     edgeMerge
-      .select<SVGLineElement>('line.edge-line')
+      .select<SVGPathElement>('path.edge-line')
       .attr('marker-end', (d) =>
         d.type === 'arrow' ? 'url(#edge-arrowhead)' : null,
       )
@@ -538,6 +600,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .drag<SVGGElement, PositionedNode>()
       .on('start', function (event) {
         event.sourceEvent?.stopPropagation();
+        edgeRoutingModeRef.current = 'live';
         if (zoomBehaviorRef.current) {
           svgSelection.on('.zoom', null);
         }
@@ -559,6 +622,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         refreshAllEdgeGraphics();
       })
       .on('end', function (event, d) {
+        edgeRoutingModeRef.current = 'dagre';
         if (zoomBehaviorRef.current) {
           svgSelection.call(zoomBehaviorRef.current as any);
         }

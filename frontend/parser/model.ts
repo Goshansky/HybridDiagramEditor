@@ -22,12 +22,19 @@ export interface DiagramNodeModel {
 
 export type EdgeType = 'arrow' | 'line';
 
+export interface DiagramEdgePoint {
+  x: number;
+  y: number;
+}
+
 export interface DiagramEdgeModel {
   from: string;
   to: string;
   label?: string;
   type: EdgeType;
   styles: Record<string, string>;
+  /** Ортогональный маршрут из dagre (если есть); при ручном layout из подсказки не задаётся. */
+  points?: DiagramEdgePoint[];
 }
 
 export interface DiagramMetadata {
