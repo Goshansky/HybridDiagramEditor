@@ -5,7 +5,9 @@ import type {
   LayoutHintData,
   NodeShape,
   NodeStatementAst,
+  StatementAst,
   StyleStatementAst,
+  SubgraphBlockAst,
 } from './ast';
 
 export interface DiagramNodeModel {
@@ -37,6 +39,14 @@ export interface DiagramEdgeModel {
   points?: DiagramEdgePoint[];
 }
 
+/** Подграф для рамки на холсте (узлы — транзитивно из тела и вложенных subgraph). */
+export interface DiagramSubgraphModel {
+  id: string;
+  title?: string;
+  nodeIds: string[];
+  styles: Record<string, string>;
+}
+
 export interface DiagramMetadata {
   direction: 'TD' | 'LR' | 'BT' | 'RL';
   scale?: number;
@@ -48,11 +58,31 @@ export interface DiagramModel {
   edges: DiagramEdgeModel[];
   layout: Record<string, { x: number; y: number }>;
   metadata: DiagramMetadata;
+  subgraphs?: DiagramSubgraphModel[];
+}
+
+function collectNodeIdsFromBody(body: StatementAst[]): string[] {
+  const ids = new Set<string>();
+  const walk = (stmts: StatementAst[]): void => {
+    for (const s of stmts) {
+      if (s.type === 'NodeStatement') {
+        ids.add(s.node.id);
+      } else if (s.type === 'EdgeStatement') {
+        ids.add(s.from.id);
+        ids.add(s.to.id);
+      } else if (s.type === 'SubgraphBlock') {
+        walk(s.body);
+      }
+    }
+  };
+  walk(body);
+  return [...ids];
 }
 
 export function buildDiagramModel(ast: DiagramAst): DiagramModel {
   const nodes = new Map<string, DiagramNodeModel>();
   const edges: DiagramEdgeModel[] = [];
+  const subgraphById = new Map<string, DiagramSubgraphModel>();
 
   const direction: 'TD' | 'LR' | 'BT' | 'RL' = ast.graph?.direction ?? 'TD';
   const layout: Record<string, { x: number; y: number }> = {};
@@ -82,7 +112,24 @@ export function buildDiagramModel(ast: DiagramAst): DiagramModel {
     return node;
   };
 
+  const subgraphIds = new Set(ast.subgraphGroupIds ?? []);
+
+  const ensureSubgraphModel = (id: string): DiagramSubgraphModel => {
+    let sg = subgraphById.get(id);
+    if (!sg) {
+      sg = { id, nodeIds: [], styles: {} };
+      subgraphById.set(id, sg);
+    }
+    return sg;
+  };
+
   const applyStyle = (stmt: StyleStatementAst): void => {
+    if (subgraphIds.has(stmt.nodeId)) {
+      const sg = ensureSubgraphModel(stmt.nodeId);
+      const styleProps = parseStyleString(stmt.rawStyle);
+      Object.assign(sg.styles, styleProps);
+      return;
+    }
     const node = ensureNode(stmt.nodeId);
     const styleProps = parseStyleString(stmt.rawStyle);
     Object.assign(node.styles, styleProps);
@@ -108,28 +155,50 @@ export function buildDiagramModel(ast: DiagramAst): DiagramModel {
     }
   };
 
-  for (const stmt of ast.statements) {
-    if (stmt.type === 'NodeStatement') {
-      ensureNode(stmt.node.id, stmt.node.label, stmt.node.shape);
-    } else if (stmt.type === 'EdgeStatement') {
-      const e = stmt as EdgeStatementAst;
-      const fromNode = ensureNode(e.from.id, e.from.label, e.from.shape);
-      const toNode = ensureNode(e.to.id, e.to.label, e.to.shape);
+  const registerSubgraphBlock = (block: SubgraphBlockAst): void => {
+    if (block.id) {
+      const nodeIds = collectNodeIdsFromBody(block.body);
+      const sg = ensureSubgraphModel(block.id);
+      sg.nodeIds = nodeIds;
+      if (block.title) sg.title = block.title;
+    }
+    processStatements(block.body);
+  };
 
-      const edge: DiagramEdgeModel = {
-        from: fromNode.id,
-        to: toNode.id,
-        label: e.label,
-        type: e.operator,
-        styles: {},
-      };
-      edges.push(edge);
-    } else if (stmt.type === 'StyleStatement') {
-      applyStyle(stmt as StyleStatementAst);
-    } else if (stmt.type === 'LayoutHint') {
-      applyLayout(stmt as LayoutHintAst);
+  function processStatements(stmts: StatementAst[]): void {
+    for (const stmt of stmts) {
+      if (stmt.type === 'NodeStatement') {
+        ensureNode(stmt.node.id, stmt.node.label, stmt.node.shape);
+      } else if (stmt.type === 'EdgeStatement') {
+        const e = stmt as EdgeStatementAst;
+        const fromNode = ensureNode(e.from.id, e.from.label, e.from.shape);
+        const toNode = ensureNode(e.to.id, e.to.label, e.to.shape);
+
+        const edgeStyles: Record<string, string> = {};
+        if (e.dotted) {
+          edgeStyles['stroke-dasharray'] = '6 4';
+        }
+        edges.push({
+          from: fromNode.id,
+          to: toNode.id,
+          label: e.label,
+          type: e.operator,
+          styles: edgeStyles,
+        });
+      } else if (stmt.type === 'StyleStatement') {
+        applyStyle(stmt as StyleStatementAst);
+      } else if (stmt.type === 'LayoutHint') {
+        applyLayout(stmt as LayoutHintAst);
+      } else if (stmt.type === 'SubgraphBlock') {
+        registerSubgraphBlock(stmt);
+      }
     }
   }
+
+  processStatements(ast.statements);
+
+  const subgraphs =
+    subgraphById.size > 0 ? Array.from(subgraphById.values()) : undefined;
 
   return {
     nodes: Array.from(nodes.values()),
@@ -138,6 +207,7 @@ export function buildDiagramModel(ast: DiagramAst): DiagramModel {
     metadata: {
       direction,
     },
+    subgraphs,
   };
 }
 
@@ -157,4 +227,3 @@ function parseStyleString(raw: string): Record<string, string> {
 
   return result;
 }
-

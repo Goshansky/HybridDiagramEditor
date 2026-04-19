@@ -12,7 +12,12 @@ import { parseErDiagram } from './erDiagram';
 
 export type DiagramType = 'flowchart' | 'class' | 'sequence' | 'er';
 
-export type { DiagramEdgePoint, DiagramModel } from './model';
+export type { DiagramEdgePoint, DiagramModel, DiagramSubgraphModel } from './model';
+export {
+  mergeEdgeLayoutFromCache,
+  snapshotEdgesForLayoutCache,
+  type EdgeLayoutSnapshot,
+} from './edgeLayoutCache';
 export {
   sourceHasLayoutPositionHints,
   stripLayoutHintsFromSource,

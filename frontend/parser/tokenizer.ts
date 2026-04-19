@@ -3,9 +3,11 @@ import type { Direction, NodeShape, Position } from './ast';
 export type TokenType =
   | 'GRAPH'
   | 'STYLE'
+  | 'SUBGRAPH'
   | 'DIRECTION'
   | 'IDENT'
   | 'ARROW' // -->
+  | 'DOTTED_ARROW' // -.->
   | 'LINE' // ---
   | 'EDGE_LABEL' // |text|
   | 'NODE_SHAPE_TEXT' // [Text], ((Text)), {Text}
@@ -200,6 +202,27 @@ export class Lexer {
     const start = this.currentPosition();
     const startOffset = this.index;
 
+    // -.-> (проверять до --, иначе -.- путается)
+    if (
+      this.peek() === '-' &&
+      this.input.slice(this.index, this.index + 4) === '-.->'
+    ) {
+      this.advance();
+      this.advance();
+      this.advance();
+      this.advance();
+      const end = this.currentPosition();
+      const endOffset = this.index;
+      return {
+        type: 'DOTTED_ARROW',
+        value: '-.->',
+        start,
+        end,
+        startOffset,
+        endOffset,
+      };
+    }
+
     if (this.peek() !== '-' || this.peekNext() !== '-') {
       return null;
     }
@@ -350,11 +373,14 @@ export class Lexer {
     let type: TokenType = 'IDENT';
     let value: string | undefined = text;
 
-    if (lower === 'graph') {
+    if (lower === 'graph' || lower === 'flowchart') {
       type = 'GRAPH';
       value = text;
     } else if (lower === 'style') {
       type = 'STYLE';
+      value = text;
+    } else if (lower === 'subgraph') {
+      type = 'SUBGRAPH';
       value = text;
     } else if (text === 'TD' || text === 'LR' || text === 'BT' || text === 'RL') {
       type = 'DIRECTION';

@@ -18,7 +18,9 @@ import {
 import { Link, useLocation } from 'react-router-dom';
 
 import {
+  mergeEdgeLayoutFromCache,
   parseMermaidByType,
+  snapshotEdgesForLayoutCache,
   sourceHasLayoutPositionHints,
   stripLayoutHintsFromSource,
   upsertLayoutHint,
@@ -44,6 +46,7 @@ import {
 } from '../services/diagramApi';
 import {
   clearVersions,
+  disableAutoLayout,
   enableAutoLayout,
   setDiagrams,
   setCurrentDiagramType,
@@ -94,6 +97,9 @@ export const EditorPage: React.FC = () => {
   const selectedDiagramId = useAppSelector(
     (state) => state.diagram.selectedDiagramId,
   );
+  const useAutoLayout = useAppSelector((state) => state.diagram.useAutoLayout);
+  /** Последний dagre-снимок рёбер (points + styles) для ручного режима без повторного layout. */
+  const dagreEdgeCacheRef = useRef<ReturnType<typeof snapshotEdgesForLayoutCache> | null>(null);
   const selectedCanvasNodeId = useAppSelector((state) => getSelectedNodeIdFromState(state.ui));
   const selectedCanvasEdgeIndex = useAppSelector((state) =>
     getSelectedEdgeIndexFromState(state.ui),
@@ -123,7 +129,7 @@ export const EditorPage: React.FC = () => {
   const parsed = useMemo(() => {
     try {
       return {
-        model: parseMermaidByType(source, currentDiagramType, true),
+        model: parseMermaidByType(source, currentDiagramType, useAutoLayout),
         error: null as string | null,
       };
     } catch (e) {
@@ -133,7 +139,28 @@ export const EditorPage: React.FC = () => {
         error: msg,
       };
     }
-  }, [currentDiagramType, source]);
+  }, [currentDiagramType, source, useAutoLayout]);
+
+  useEffect(() => {
+    if (currentDiagramType !== 'flowchart') {
+      dagreEdgeCacheRef.current = null;
+      return;
+    }
+    if (!parsed.model || parsed.error || !useAutoLayout) {
+      return;
+    }
+    dagreEdgeCacheRef.current = snapshotEdgesForLayoutCache(parsed.model);
+  }, [parsed.model, parsed.error, currentDiagramType, useAutoLayout]);
+
+  const diagramModel = useMemo(() => {
+    if (parsed.error || !parsed.model) return null;
+    if (currentDiagramType !== 'flowchart') return parsed.model;
+    const model = parsed.model;
+    if (!useAutoLayout && dagreEdgeCacheRef.current?.length) {
+      mergeEdgeLayoutFromCache(model, dagreEdgeCacheRef.current);
+    }
+    return model;
+  }, [parsed.model, parsed.error, currentDiagramType, useAutoLayout, source]);
 
   const triggerZoom = (type: 'in' | 'out' | 'reset'): void => {
     if (type === 'in') {
@@ -885,9 +912,9 @@ export const EditorPage: React.FC = () => {
               overflow: 'auto',
             }}
           >
-            {parsed.model ? (
+            {diagramModel ? (
               <DiagramCanvas
-                model={parsed.model}
+                model={diagramModel}
                 canvasId="diagram-canvas"
                 zoomCommand={zoomCommandStable}
                 disableNodeDrag={currentDiagramType === 'sequence'}
@@ -907,6 +934,9 @@ export const EditorPage: React.FC = () => {
                   setEditingEdge(edge);
                 }}
                 onNodePositionChange={(id, x, y, size) => {
+                  if (currentDiagramType === 'flowchart') {
+                    dispatch(disableAutoLayout());
+                  }
                   setSource((prevSource) => {
                     const nextSource = upsertLayoutHint(prevSource, id, x, y, size);
                     return nextSource === prevSource ? prevSource : nextSource;
@@ -943,9 +973,9 @@ export const EditorPage: React.FC = () => {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>Узлов: {parsed.model?.nodes.length ?? 0}</span>
+              <span>Узлов: {diagramModel?.nodes.length ?? 0}</span>
               <span style={{ color: '#9ca3af' }}>|</span>
-              <span>Рёбер: {parsed.model?.edges.length ?? 0}</span>
+              <span>Рёбер: {diagramModel?.edges.length ?? 0}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 8, height: 8, borderRadius: 999, background: '#22c55e' }} />
@@ -958,7 +988,7 @@ export const EditorPage: React.FC = () => {
             hasCanvasSelection ? (
               <PropertiesPanel
                 diagramType={currentDiagramType}
-                model={parsed.model}
+                model={diagramModel}
                 source={source}
                 onSourceChange={setSource}
               />
@@ -1011,8 +1041,8 @@ export const EditorPage: React.FC = () => {
       ) : null}
       {editingNodeId ? (
         <NodeEditor
-          initialLabel={findNodeLabel(parsed.model?.nodes ?? [], editingNodeId) ?? editingNodeId}
-          initialShape={(findNodeShape(parsed.model?.nodes ?? [], editingNodeId) ?? 'rect') as FlowNodeShape}
+          initialLabel={findNodeLabel(diagramModel?.nodes ?? [], editingNodeId) ?? editingNodeId}
+          initialShape={(findNodeShape(diagramModel?.nodes ?? [], editingNodeId) ?? 'rect') as FlowNodeShape}
           onCancel={() => setEditingNodeId(null)}
           onSubmit={handleNodeEditSave}
         />

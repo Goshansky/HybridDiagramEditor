@@ -43,6 +43,8 @@ export interface EdgeStatementAst {
   from: ParsedNode;
   to: ParsedNode;
   operator: EdgeOperator;
+  /** Связь `-.->` (пунктир). */
+  dotted?: boolean;
   label?: string;
   range: Range;
 }
@@ -81,11 +83,23 @@ export type StatementAst =
   | StyleStatementAst
   | LayoutHintAst
   | CommentStatementAst
-  | GraphAst;
+  | GraphAst
+  | SubgraphBlockAst;
+
+/** Вложенный блок `subgraph id [заголовок] … end`. */
+export interface SubgraphBlockAst {
+  type: 'SubgraphBlock';
+  id: string;
+  title?: string;
+  body: StatementAst[];
+  range: Range;
+}
 
 export interface DiagramAst {
   type: 'Diagram';
   graph?: GraphAst;
   statements: StatementAst[];
+  /** id подграфов (для `style GroupId ...` без фиктивного узла). */
+  subgraphGroupIds?: string[];
 }
 

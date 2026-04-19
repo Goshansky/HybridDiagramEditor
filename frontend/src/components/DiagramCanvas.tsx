@@ -68,6 +68,38 @@ interface PositionedEdge {
 
 const NODE_WIDTH = 110;
 const NODE_HEIGHT = 46;
+const NODE_LINE_HEIGHT_PX = 16;
+
+function nodeHeightForLabel(label: string, explicitHeight?: number): number {
+  if (typeof explicitHeight === 'number' && explicitHeight > 0) {
+    return explicitHeight;
+  }
+  const lines = label.split('\n');
+  if (lines.length <= 1) return NODE_HEIGHT;
+  return Math.max(NODE_HEIGHT, 28 + (lines.length - 1) * NODE_LINE_HEIGHT_PX);
+}
+
+function setSvgTextMultiline(
+  textSel: d3.Selection<SVGTextElement, unknown, null, undefined>,
+  label: string,
+): void {
+  const lines = label.split('\n');
+  textSel.selectAll('tspan').remove();
+  if (lines.length <= 1) {
+    textSel.text(label);
+    return;
+  }
+  textSel.text(null);
+  const lh = NODE_LINE_HEIGHT_PX;
+  const startY = -((lines.length - 1) * lh) / 2;
+  lines.forEach((line, i) => {
+    textSel
+      .append('tspan')
+      .attr('x', 0)
+      .attr('y', startY + i * lh)
+      .text(line);
+  });
+}
 
 function computeLayout(
   model: DiagramModel,
@@ -138,10 +170,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   const rootGroupRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
   const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const zoomInitializedRef = useRef(false);
-  /** Пока тянем узел, ортогональные точки из dagre устаревают — рисуем рёбра по границам узлов. */
-  const edgeRoutingModeRef = useRef<'dagre' | 'live'>('dagre');
   /** Не даём zoom перехватывать жесты во время drag узла (без снятия/повторного svg.call(zoom) — иначе сбрасывается transform). */
   const isNodeDraggingRef = useRef(false);
+  /** Во время drag — прямые рёбра; после end — снова по `routePoints` из модели. */
+  const edgeDragDrawRef = useRef<'orthogonal' | 'straight'>('orthogonal');
 
   // базовая инициализация zoom/pan (один раз; не пересоздавать при смене model)
   useEffect(() => {
@@ -251,6 +283,11 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       edgesG = rootG.append('g').attr('class', 'edges');
     }
 
+    let subgraphsG = rootG.select<SVGGElement>('g.subgraphs');
+    if (subgraphsG.empty()) {
+      subgraphsG = rootG.insert('g', 'g.edges').attr('class', 'subgraphs');
+    }
+
     let nodesG = rootG.select<SVGGElement>('g.nodes');
     if (nodesG.empty()) {
       nodesG = rootG.append('g').attr('class', 'nodes');
@@ -297,13 +334,109 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         x: hasXY ? n.x! : (fb?.x ?? 0),
         y: hasXY ? n.y! : (fb?.y ?? 0),
         width: typeof n.width === 'number' && n.width > 0 ? n.width : NODE_WIDTH,
-        height: typeof n.height === 'number' && n.height > 0 ? n.height : NODE_HEIGHT,
+        height: nodeHeightForLabel(n.label ?? n.id, n.height),
       };
     });
 
     const nodeById = new Map<string, PositionedNode>(
       positionedNodes.map((n) => [n.id, n]),
     );
+
+    interface SubgraphLayoutBox {
+      id: string;
+      title?: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      titleX: number;
+      titleY: number;
+      styles: Record<string, string>;
+    }
+
+    const subgraphPad = 20;
+    const subgraphTitleBand = 18;
+    const subgraphLayouts: SubgraphLayoutBox[] = [];
+    for (const sg of model.subgraphs ?? []) {
+      if (!sg.id) continue;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const nid of sg.nodeIds) {
+        const n = nodeById.get(nid);
+        if (!n) continue;
+        const L = n.x - n.width / 2;
+        const R = n.x + n.width / 2;
+        const T = n.y - n.height / 2;
+        const B = n.y + n.height / 2;
+        minX = Math.min(minX, L);
+        maxX = Math.max(maxX, R);
+        minY = Math.min(minY, T);
+        maxY = Math.max(maxY, B);
+      }
+      if (!Number.isFinite(minX)) continue;
+      const titleH = sg.title ? subgraphTitleBand : 0;
+      subgraphLayouts.push({
+        id: sg.id,
+        title: sg.title,
+        x: minX - subgraphPad,
+        y: minY - subgraphPad - titleH,
+        width: maxX - minX + 2 * subgraphPad,
+        height: maxY - minY + 2 * subgraphPad + titleH,
+        titleX: minX - subgraphPad + 8,
+        titleY: minY - subgraphPad - titleH + 14,
+        styles: sg.styles ?? {},
+      });
+    }
+
+    const subgraphSelection = subgraphsG
+      .selectAll<SVGGElement, SubgraphLayoutBox>('g.subgraph')
+      .data(subgraphLayouts, (d) => d.id);
+
+    subgraphSelection.exit().remove();
+
+    const subgraphEnter = subgraphSelection
+      .enter()
+      .append('g')
+      .attr('class', 'subgraph')
+      .style('pointer-events', 'none');
+
+    subgraphEnter
+      .append('rect')
+      .attr('class', 'subgraph-bg')
+      .attr('rx', 8)
+      .attr('ry', 8);
+
+    subgraphEnter
+      .append('text')
+      .attr('class', 'subgraph-title')
+      .style('font-size', '13px')
+      .style('font-weight', '600')
+      .style('fill', '#334155');
+
+    const subgraphMerge = subgraphEnter.merge(subgraphSelection);
+    subgraphMerge
+      .select<SVGRectElement>('rect.subgraph-bg')
+      .attr('x', (d) => d.x)
+      .attr('y', (d) => d.y)
+      .attr('width', (d) => d.width)
+      .attr('height', (d) => d.height)
+      .attr('fill', (d) => d.styles.fill ?? 'rgba(248, 250, 252, 0.92)')
+      .attr('stroke', (d) => d.styles.stroke ?? '#64748b')
+      .attr('stroke-width', (d) => {
+        const w = d.styles['stroke-width'] ?? d.styles.strokeWidth;
+        if (w === undefined) return 1.2;
+        const n = Number.parseFloat(String(w).replace(/px/gi, '').trim());
+        return Number.isFinite(n) ? n : 1.2;
+      })
+      .attr('stroke-dasharray', (d) => d.styles['stroke-dasharray'] ?? null);
+
+    subgraphMerge
+      .select<SVGTextElement>('text.subgraph-title')
+      .attr('x', (d) => d.titleX)
+      .attr('y', (d) => d.titleY)
+      .text((d) => d.title ?? d.id);
 
     const positionedEdges: PositionedEdge[] = model.edges.map((e, edgeIndex) => {
       const from = nodeById.get(e.from);
@@ -450,12 +583,12 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           return;
         }
 
-        const useDagre =
-          edgeRoutingModeRef.current === 'dagre' &&
+        const useSavedRoute =
+          edgeDragDrawRef.current === 'orthogonal' &&
           d.routePoints &&
           d.routePoints.length >= 2;
 
-        if (useDagre) {
+        if (useSavedRoute) {
           let pts = d.routePoints!.map((p) => ({ x: p.x, y: p.y }));
           if (d.type === 'arrow') {
             pts = trimPolylineEndForArrow(pts, ARROW_TIP_GAP);
@@ -489,9 +622,12 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         d.type === 'arrow' ? 'url(#edge-arrowhead)' : null,
       )
       .attr('stroke', (d) =>
-        selectedEdgeIndex === d.edgeIndex ? '#4f46e5' : '#4b5563',
+        selectedEdgeIndex === d.edgeIndex
+          ? '#4f46e5'
+          : (d.styles.stroke ?? '#4b5563'),
       )
-      .attr('stroke-width', (d) => (selectedEdgeIndex === d.edgeIndex ? 3 : 2));
+      .attr('stroke-width', (d) => (selectedEdgeIndex === d.edgeIndex ? 3 : 2))
+      .attr('stroke-dasharray', (d) => d.styles['stroke-dasharray'] ?? null);
 
     edgeMerge.select<SVGTextElement>('text.edge-label').text((d) => d.label ?? '');
 
@@ -596,7 +732,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           .attr('ry', 6);
       }
 
-      g.select<SVGTextElement>('text').text(d.label);
+      setSvgTextMultiline(g.select<SVGTextElement>('text'), d.label);
     });
 
     nodeMerge.attr('transform', (d) => `translate(${d.x},${d.y})`);
@@ -619,7 +755,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .on('start', function (event) {
         event.sourceEvent?.stopPropagation();
         isNodeDraggingRef.current = true;
-        edgeRoutingModeRef.current = 'live';
+        edgeDragDrawRef.current = 'straight';
         d3.select<SVGGElement, PositionedNode>(this)
           .select<
             SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
@@ -639,7 +775,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       })
       .on('end', function (event, d) {
         isNodeDraggingRef.current = false;
-        edgeRoutingModeRef.current = 'dagre';
+        edgeDragDrawRef.current = 'orthogonal';
         d3.select<SVGGElement, PositionedNode>(this)
           .select<
             SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement

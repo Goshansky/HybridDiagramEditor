@@ -96,5 +96,29 @@ A --> B
     updatedHint.includes('%% {"layout":{"A":{"x":1,"y":2},"B":{"x":20,"y":30}}}'),
     'Expected existing layout hint to be updated',
   );
+
+  // flowchart TD (алиас graph) + subgraph … end + пунктир
+  const subgraphFlow = `
+flowchart TD
+  subgraph F [Frontend]
+    A["Строка 1\\nСтрока 2"]
+  end
+  A --> B[B]
+  A -.->|x| B
+  style F fill:#eee
+  style A fill:#f9f
+`.trim();
+  const sgModel = parseMermaidFlowchart(subgraphFlow);
+  assert(sgModel.nodes.every((n) => n.id !== 'F'), 'subgraph id F не должен стать узлом');
+  const sgF = sgModel.subgraphs?.find((s) => s.id === 'F');
+  assert(!!sgF && sgF.title === 'Frontend' && sgF.nodeIds.includes('A'), 'модель subgraph F');
+  assert(sgF?.styles.fill === '#eee', 'style fill на subgraph F');
+  assert(sgModel.nodes.some((n) => n.id === 'A'), 'узел A из subgraph');
+  assert(sgModel.nodes.some((n) => n.id === 'B'), 'узел B');
+  assert(sgModel.edges.length === 2, 'два ребра A-->B и A-.->B');
+  const dashEdge = sgModel.edges.find((e) => e.label === 'x');
+  assert(dashEdge?.styles['stroke-dasharray'] === '6 4', 'пунктирное ребро');
+  const nodeASg = sgModel.nodes.find((n) => n.id === 'A');
+  assert(nodeASg?.styles.fill === '#f9f', 'style на узел A применён');
 }
 

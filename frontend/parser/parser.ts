@@ -11,6 +11,7 @@ import {
   type Range,
   type StatementAst,
   type StyleStatementAst,
+  type SubgraphBlockAst,
 } from './ast';
 import { type Token, type TokenType, tokenize } from './tokenizer';
 
@@ -29,6 +30,8 @@ export class Parser {
   private readonly source: string;
   private current = 0;
   private graph?: GraphAst;
+  private subgraphDepth = 0;
+  private subgraphGroupIds: string[] = [];
 
   constructor(source: string, tokens?: Token[]) {
     this.source = source;
@@ -36,11 +39,18 @@ export class Parser {
   }
 
   parseDiagram(): DiagramAst {
+    this.subgraphGroupIds = [];
+    this.subgraphDepth = 0;
     const statements: StatementAst[] = [];
 
     while (!this.match('EOF')) {
       this.skipNewlines();
       if (this.match('EOF')) break;
+
+      if (this.check('SUBGRAPH')) {
+        statements.push(this.parseSubgraphBlock());
+        continue;
+      }
 
       const stmt = this.parseStatement();
       if (!stmt) {
@@ -58,7 +68,82 @@ export class Parser {
       type: 'Diagram',
       graph: this.graph,
       statements,
+      subgraphGroupIds:
+        this.subgraphGroupIds.length > 0 ? [...this.subgraphGroupIds] : undefined,
     };
+  }
+
+  /** subgraph id [[заголовок]] … end — тело хранится в AST для рамок на холсте. */
+  private parseSubgraphBlock(): SubgraphBlockAst {
+    const startTok = this.consume('SUBGRAPH');
+    let id = '';
+    if (this.check('IDENT')) {
+      const idTok = this.consume('IDENT');
+      id = idTok.value ?? '';
+      if (id) this.subgraphGroupIds.push(id);
+    }
+    let title: string | undefined;
+    if (this.check('NODE_SHAPE_TEXT')) {
+      const st = this.peek();
+      if (st.meta?.shape === 'rect') {
+        const shapeTok = this.advance();
+        title = shapeTok.value?.trim() || undefined;
+      }
+    }
+    this.consumeLineRemainder();
+    const body = this.parseBlockUntilMatchingEnd();
+    const endTok = this.previous();
+    return {
+      type: 'SubgraphBlock',
+      id,
+      title,
+      body,
+      range: makeRange(startTok.start, endTok.end),
+    };
+  }
+
+  private parseBlockUntilMatchingEnd(): StatementAst[] {
+    const out: StatementAst[] = [];
+    this.subgraphDepth += 1;
+    while (!this.match('EOF')) {
+      this.skipNewlines();
+      if (this.match('EOF')) break;
+
+      if (this.isBareSubgraphEnd()) {
+        this.consume('IDENT');
+        this.consumeLineRemainder();
+        this.subgraphDepth -= 1;
+        return out;
+      }
+
+      if (this.check('SUBGRAPH')) {
+        out.push(this.parseSubgraphBlock());
+        continue;
+      }
+
+      const stmt = this.parseStatement();
+      if (!stmt) continue;
+      if (stmt.type === 'Graph') {
+        throw new ParseError(
+          'Директива graph не допускается внутри subgraph',
+          this.peek().start,
+        );
+      }
+      out.push(stmt);
+    }
+    this.subgraphDepth -= 1;
+    return out;
+  }
+
+  private isBareSubgraphEnd(): boolean {
+    if (this.subgraphDepth < 1) return false;
+    if (!this.check('IDENT')) return false;
+    const v = (this.peek().value ?? '').toLowerCase();
+    if (v !== 'end') return false;
+    const next = this.tokens[this.current + 1];
+    if (!next || next.type === 'NEWLINE' || next.type === 'EOF') return true;
+    if (next.type === 'COMMENT') return true;
+    return false;
   }
 
   private parseStatement(): StatementAst | null {
@@ -99,9 +184,10 @@ export class Parser {
     const startToken = this.peek();
     const fromNode = this.parseNodeCore();
 
-    if (this.check('ARROW') || this.check('LINE')) {
+    if (this.check('ARROW') || this.check('LINE') || this.check('DOTTED_ARROW')) {
       const opToken = this.advance();
-      const operator: EdgeOperator = opToken.type === 'ARROW' ? 'arrow' : 'line';
+      const operator: EdgeOperator = opToken.type === 'LINE' ? 'line' : 'arrow';
+      const dotted = opToken.type === 'DOTTED_ARROW';
 
       let label: string | undefined;
       if (this.check('EDGE_LABEL')) {
@@ -119,6 +205,7 @@ export class Parser {
         from: fromNode,
         to: toNode,
         operator,
+        dotted: dotted || undefined,
         label,
         range: makeRange(startToken.start, endToken.end),
       };

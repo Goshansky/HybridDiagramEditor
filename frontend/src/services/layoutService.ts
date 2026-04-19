@@ -33,10 +33,8 @@ export function applyDagreLayout(
     return model;
   }
 
+  /** Ручной режим: не трогаем позиции узлов, `points` и стили рёбер (остаются от последнего dagre). */
   if (!useAutoLayout) {
-    for (const e of model.edges) {
-      delete e.points;
-    }
     return model;
   }
 
