@@ -1,6 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import type { DiagramModel } from '../../parser';
+import {
+  computeEdgeEndpointsBetweenNodes,
+  type PositionedNodeLike,
+} from './diagramCanvasGeometry';
 
 interface DiagramCanvasProps {
   model: DiagramModel | null;
@@ -356,16 +360,49 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       onEdgeDoubleClick?.({ from: d.from, to: d.to, label: d.label, type: d.type });
     });
 
-    const applyEdgeLineCoords = (
-      sel: d3.Selection<SVGLineElement, PositionedEdge, SVGGElement, unknown>,
-    ): void => {
-      sel.each(function (d: PositionedEdge) {
-        const { x1, y1, x2, y2 } = computeEdgeEndpoints(d);
-        d3.select(this).attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2);
+    const toGeom = (n: PositionedNode): PositionedNodeLike => ({
+      id: n.id,
+      x: n.x,
+      y: n.y,
+      width: n.width,
+      height: n.height,
+      shape: n.shape,
+    });
+
+    const refreshAllEdgeGraphics = (): void => {
+      const seq = model.metadata.diagramType === 'sequence';
+      edgeMerge.each(function (this: SVGGElement, d: PositionedEdge, i: number) {
+        const from = nodeById.get(d.from);
+        const to = nodeById.get(d.to);
+        if (!from || !to) return;
+        let { x1, y1, x2, y2 } = computeEdgeEndpointsBetweenNodes(
+          toGeom(from),
+          toGeom(to),
+          d.type,
+        );
+        if (seq) {
+          const yy = 130 + i * 48;
+          y1 = yy;
+          y2 = yy;
+        }
+        const g = d3.select(this);
+        g.select<SVGLineElement>('line.edge-line')
+          .attr('x1', x1)
+          .attr('y1', y1)
+          .attr('x2', x2)
+          .attr('y2', y2);
+        g.select<SVGLineElement>('line.edge-hit')
+          .attr('x1', x1)
+          .attr('y1', y1)
+          .attr('x2', x2)
+          .attr('y2', y2);
+        const labelY = seq ? 130 + i * 48 - 10 : (y1 + y2) / 2 - 6;
+        g.select<SVGTextElement>('text.edge-label')
+          .attr('x', (x1 + x2) / 2)
+          .attr('y', labelY);
       });
     };
 
-    applyEdgeLineCoords(edgeMerge.select<SVGLineElement>('line.edge-line'));
     edgeMerge
       .select<SVGLineElement>('line.edge-line')
       .attr('marker-end', (d) =>
@@ -376,13 +413,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       )
       .attr('stroke-width', (d) => (selectedEdgeIndex === d.edgeIndex ? 3 : 2));
 
-    applyEdgeLineCoords(edgeMerge.select<SVGLineElement>('line.edge-hit'));
+    edgeMerge.select<SVGTextElement>('text.edge-label').text((d) => d.label ?? '');
 
-    edgeMerge
-      .select<SVGTextElement>('text.edge-label')
-      .text((d) => d.label ?? '')
-      .attr('x', (d) => (d.fromX + d.toX) / 2)
-      .attr('y', (d) => (d.fromY + d.toY) / 2 - 6);
+    refreshAllEdgeGraphics();
 
     edgeSelection.exit().remove();
 
@@ -411,18 +444,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
       lifeSelection.exit().remove();
 
-      const seqY = (_d: PositionedEdge, i: number) => 130 + i * 48;
-      edgeMerge
-        .select<SVGLineElement>('line.edge-line')
-        .attr('y1', seqY)
-        .attr('y2', seqY);
-      edgeMerge
-        .select<SVGLineElement>('line.edge-hit')
-        .attr('y1', seqY)
-        .attr('y2', seqY);
-      edgeMerge
-        .select<SVGTextElement>('text.edge-label')
-        .attr('y', (_d, i) => 130 + i * 48 - 10);
     } else {
       rootG.select<SVGGElement>('g.lifelines').remove();
     }
@@ -512,36 +533,42 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
     nodeSelection.exit().remove();
 
-    // drag behavior
+    // drag behavior (this = <g class="node">; не использовать event.source — в D3DragEvent его нет)
     const dragBehavior = d3
       .drag<SVGGElement, PositionedNode>()
-      .on('start', (event) => {
+      .on('start', function (event) {
         event.sourceEvent?.stopPropagation();
-        // Визуальное выделение узла при начале перетаскивания
-        d3.select<SVGGElement, PositionedNode>(event.source)
+        if (zoomBehaviorRef.current) {
+          svgSelection.on('.zoom', null);
+        }
+        d3.select<SVGGElement, PositionedNode>(this)
           .select<
             SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
           >('rect,polygon,circle,ellipse,path')
           .attr('opacity', 0.7)
           .attr('stroke-width', 3);
       })
-      .on('drag', (event, d) => {
-        d.x += event.dx;
-        d.y += event.dy;
-        // Обновление позиции в реальном времени для предпросмотра
-        d3.select<SVGGElement, PositionedNode>(event.source).attr(
+      .on('drag', function (event, d) {
+        const k = d3.zoomTransform(svg).k || 1;
+        d.x += event.dx / k;
+        d.y += event.dy / k;
+        d3.select<SVGGElement, PositionedNode>(this).attr(
           'transform',
           `translate(${d.x},${d.y})`,
         );
+        refreshAllEdgeGraphics();
       })
-      .on('end', (event, d) => {
-        // Восстановление визуального стиля
-        d3.select<SVGGElement, PositionedNode>(event.source)
+      .on('end', function (event, d) {
+        if (zoomBehaviorRef.current) {
+          svgSelection.call(zoomBehaviorRef.current as any);
+        }
+        d3.select<SVGGElement, PositionedNode>(this)
           .select<
             SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
           >('rect,polygon,circle,ellipse,path')
           .attr('opacity', 1)
           .attr('stroke-width', (n) => nodeStrokeWidthPx(n, selectedNodeId));
+        refreshAllEdgeGraphics();
         onNodePositionChange?.(d.id, d.x, d.y, { width: d.width, height: d.height });
       });
 
@@ -594,31 +621,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   );
 };
 
-function computeEdgeEndpoints(edge: PositionedEdge): {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-} {
-  const { fromX, fromY, toX, toY } = edge;
-  const dx = toX - fromX;
-  const dy = toY - fromY;
-  const length = Math.sqrt(dx * dx + dy * dy) || 1;
-
-  const padStart = getNodeRadiusAlongEdge(edge.fromShape, edge.fromW, edge.fromH);
-  const padEnd = getNodeRadiusAlongEdge(edge.toShape, edge.toW, edge.toH);
-
-  const nx = dx / length;
-  const ny = dy / length;
-
-  const x1 = fromX + nx * padStart;
-  const y1 = fromY + ny * padStart;
-  const x2 = toX - nx * padEnd;
-  const y2 = toY - ny * padEnd;
-
-  return { x1, y1, x2, y2 };
-}
-
 function parseStyleStrokeWidthPx(styles: Record<string, string>): number | null {
   const raw = styles['stroke-width'] ?? styles.strokeWidth;
   if (raw === undefined || raw === '') return null;
@@ -637,17 +639,3 @@ function nodeStrokeWidthPx(
   }
   return base;
 }
-
-function getNodeRadiusAlongEdge(shape: NodeShape, w: number, h: number): number {
-  if (shape === 'circle') {
-    return Math.min(w, h) / 2;
-  }
-  if (shape === 'diamond') {
-    return Math.min(w, h) * 0.45;
-  }
-  if (shape === 'oval') {
-    return Math.max(w / 2, h / 2) * 0.9;
-  }
-  return Math.max(w, h) / 2;
-}
-
