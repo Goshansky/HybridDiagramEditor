@@ -140,8 +140,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   const zoomInitializedRef = useRef(false);
   /** Пока тянем узел, ортогональные точки из dagre устаревают — рисуем рёбра по границам узлов. */
   const edgeRoutingModeRef = useRef<'dagre' | 'live'>('dagre');
+  /** Не даём zoom перехватывать жесты во время drag узла (без снятия/повторного svg.call(zoom) — иначе сбрасывается transform). */
+  const isNodeDraggingRef = useRef(false);
 
-  // базовая инициализация zoom/pan
+  // базовая инициализация zoom/pan (один раз; не пересоздавать при смене model)
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg || zoomInitializedRef.current) return;
@@ -158,6 +160,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.3, 4])
       .filter((event) => {
+        if (isNodeDraggingRef.current) return false;
         if (event.type === 'wheel') return true;
         if (event.type === 'mousedown') {
           const mouseEvent = event as MouseEvent;
@@ -176,7 +179,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
     svgSelection.call(zoomBehavior as any);
     zoomBehaviorRef.current = zoomBehavior;
-
 
     zoomInitializedRef.current = true;
   }, []);
@@ -198,7 +200,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .transition()
       .duration(150)
       .call(zoomBehaviorRef.current.transform as any, d3.zoomIdentity);
-  }, [zoomCommand]);
+    // Только type+nonce: иначе каждый рендер родителя даёт новый объект zoomCommand и снова сбрасывает вид в identity.
+  }, [zoomCommand?.type, zoomCommand?.nonce]);
 
   // основная отрисовка / обновление
   useEffect(() => {
@@ -615,10 +618,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .drag<SVGGElement, PositionedNode>()
       .on('start', function (event) {
         event.sourceEvent?.stopPropagation();
+        isNodeDraggingRef.current = true;
         edgeRoutingModeRef.current = 'live';
-        if (zoomBehaviorRef.current) {
-          svgSelection.on('.zoom', null);
-        }
         d3.select<SVGGElement, PositionedNode>(this)
           .select<
             SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
@@ -637,10 +638,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         refreshAllEdgeGraphics();
       })
       .on('end', function (event, d) {
+        isNodeDraggingRef.current = false;
         edgeRoutingModeRef.current = 'dagre';
-        if (zoomBehaviorRef.current) {
-          svgSelection.call(zoomBehaviorRef.current as any);
-        }
         d3.select<SVGGElement, PositionedNode>(this)
           .select<
             SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement

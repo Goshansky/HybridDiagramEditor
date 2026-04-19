@@ -147,6 +147,11 @@ export const EditorPage: React.FC = () => {
     setZoomNonce((prev) => prev + 1);
   };
 
+  const zoomCommandStable = useMemo(
+    () => ({ type: zoomType, nonce: zoomNonce }),
+    [zoomType, zoomNonce],
+  );
+
   useEffect(() => {
     let mounted = true;
     const loadDiagrams = async (): Promise<void> => {
@@ -884,7 +889,7 @@ export const EditorPage: React.FC = () => {
               <DiagramCanvas
                 model={parsed.model}
                 canvasId="diagram-canvas"
-                zoomCommand={{ type: zoomType, nonce: zoomNonce }}
+                zoomCommand={zoomCommandStable}
                 disableNodeDrag={currentDiagramType === 'sequence'}
                 selectedNodeId={selectedCanvasNodeId ?? undefined}
                 selectedEdgeIndex={selectedCanvasEdgeIndex}
