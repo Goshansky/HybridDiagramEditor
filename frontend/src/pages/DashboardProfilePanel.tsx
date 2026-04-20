@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
 
-import { getCurrentUser, changePassword } from '../services/userApi';
-import { useAppDispatch, useAppSelector } from '../store';
+import { changePassword, getCurrentUser } from '../services/userApi';
 import { setAuthUser } from '../store/authSlice';
+import { useAppDispatch, useAppSelector } from '../store';
 
-export const Profile: React.FC = () => {
+export const DashboardProfilePanel: React.FC = () => {
   const dispatch = useAppDispatch();
   const authUser = useAppSelector((state) => state.auth.user);
   const [oldPassword, setOldPassword] = useState('');
@@ -58,21 +57,8 @@ export const Profile: React.FC = () => {
   };
 
   return (
-    <div style={pageStyle}>
-      <div style={headerStyle}>
-        <h1 style={{ margin: 0, fontSize: 22 }}>Профиль</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Link to="/" style={linkButtonStyle}>
-            Редактор
-          </Link>
-          <Link to="/projects" style={linkButtonStyle}>
-            Проекты
-          </Link>
-        </div>
-      </div>
-
+    <div style={{ color: '#111827' }}>
       <section style={cardStyle}>
-        <h2 style={sectionTitleStyle}>Данные пользователя</h2>
         <div style={rowStyle}>
           <span style={keyStyle}>Email:</span>
           <span>{authUser?.email ?? '...'}</span>
@@ -95,6 +81,7 @@ export const Profile: React.FC = () => {
             maxLength={72}
             required
             style={inputStyle}
+            autoComplete="current-password"
           />
           <input
             type="password"
@@ -105,6 +92,7 @@ export const Profile: React.FC = () => {
             maxLength={72}
             required
             style={inputStyle}
+            autoComplete="new-password"
           />
           <button type="submit" disabled={loading} style={buttonStyle}>
             {loading ? 'Сохраняем...' : 'Изменить пароль'}
@@ -117,27 +105,13 @@ export const Profile: React.FC = () => {
   );
 };
 
-const pageStyle: React.CSSProperties = {
-  minHeight: '100vh',
-  padding: 16,
-  background: '#0f172a',
-  color: '#e5e7eb',
-  fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
-};
-
-const headerStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: 16,
-};
-
 const cardStyle: React.CSSProperties = {
-  background: '#020617',
-  border: '1px solid #1f2937',
-  borderRadius: 8,
+  background: '#ffffff',
+  border: '1px solid #e5e7eb',
+  borderRadius: 12,
   padding: 14,
   marginBottom: 12,
+  boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)',
 };
 
 const sectionTitleStyle: React.CSSProperties = {
@@ -153,39 +127,29 @@ const rowStyle: React.CSSProperties = {
 };
 
 const keyStyle: React.CSSProperties = {
-  color: '#94a3b8',
+  color: '#6b7280',
   minWidth: 150,
 };
 
 const inputStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  background: '#0f172a',
-  color: '#e5e7eb',
-  borderRadius: 6,
+  border: '1px solid #d1d5db',
+  background: '#ffffff',
+  color: '#111827',
+  borderRadius: 8,
   padding: '8px 10px',
 };
 
 const buttonStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  background: '#1d4ed8',
+  border: '1px solid #3b82f6',
+  background: '#3b82f6',
   color: '#fff',
-  borderRadius: 6,
+  borderRadius: 8,
   padding: '8px 12px',
   cursor: 'pointer',
 };
 
-const linkButtonStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  background: '#020617',
-  color: '#e5e7eb',
-  borderRadius: 6,
-  padding: '7px 10px',
-  textDecoration: 'none',
-  fontSize: 13,
-};
-
 const statusStyle: React.CSSProperties = {
   marginTop: 10,
-  color: '#93c5fd',
+  color: '#1d4ed8',
   fontSize: 13,
 };

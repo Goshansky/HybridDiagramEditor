@@ -1,0 +1,138 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f3f4f6;
+  color: #111827;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.header {
+  height: 60px;
+  background: #ffffff;
+  border-bottom: 1px solid #e9ecef;
+  box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+}
+
+.brand {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.outlineButton {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.outlineButton:hover {
+  background: #f8fafc;
+}
+
+.main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.sidebar {
+  width: 260px;
+  background: #f8f9fa;
+  border-right: 1px solid #e9ecef;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tabButton {
+  width: 100%;
+  border: 0;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: transparent;
+  color: #374151;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tabButton:hover {
+  background: #eef2f7;
+}
+
+.tabButtonActive {
+  background: #e9ecef;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.contentWrap {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+}
+
+.contentCard {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  padding: 20px;
+}
+
+.sectionTitle {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+}
+
+.paragraph {
+  margin: 0 0 10px 0;
+  color: #4b5563;
+}
+
+.list {
+  margin: 0;
+  padding-left: 20px;
+  color: #374151;
+  display: grid;
+  gap: 8px;
+}
+
+.footer {
+  height: 50px;
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.footerLinks {
+  display: flex;
+  gap: 14px;
+}
+
+.footerLink {
+  color: #4b5563;
+  text-decoration: none;
+}
+
+.footerLink:hover {
+  text-decoration: underline;
+}

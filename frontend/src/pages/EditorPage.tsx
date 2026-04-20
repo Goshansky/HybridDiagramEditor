@@ -3,15 +3,12 @@ import { usePanelRef } from 'react-resizable-panels';
 import axios from 'axios';
 import {
   BookOpen,
-  ChevronDown,
-  FolderOpen,
   GitBranch,
   LayoutGrid,
   Link2,
   Maximize,
   MoreVertical,
   Plus,
-  User,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -35,7 +32,7 @@ import { PropertiesPanel } from '../components/PropertiesPanel';
 import { ResizableEditorLayout } from '../components/ResizableEditorLayout';
 import { SidePanel } from '../components/SidePanel';
 import { useAppDispatch, useAppSelector } from '../store';
-import { logout, setAuthUser } from '../store/authSlice';
+import { setAuthUser } from '../store/authSlice';
 import {
   createDiagram,
   getDiagram,
@@ -675,10 +672,8 @@ export const EditorPage: React.FC = () => {
             <span style={{ fontWeight: 600, color: '#1f2937' }}>HDE</span>
           </div>
 
-          <Link to="/projects" style={headerButtonStyle}>
-            <FolderOpen size={16} color="#4b5563" />
-            <span style={{ fontSize: 14, fontWeight: 500, color: '#374151' }}>Проекты</span>
-            <ChevronDown size={16} color="#6b7280" />
+          <Link to="/dashboard" style={headerButtonStyle}>
+            <span style={{ fontSize: 14, fontWeight: 500, color: '#374151' }}>Личный кабинет</span>
           </Link>
 
           <a href="#" style={headerLinkStyle}>
@@ -692,27 +687,7 @@ export const EditorPage: React.FC = () => {
           </a>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Link to="/profile" style={{ ...headerButtonStyle, padding: '8px 12px' }}>
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 999,
-                background: 'linear-gradient(to right, #4f46e5, #9333ea)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <User size={18} color="#ffffff" />
-            </div>
-            <ChevronDown size={16} color="#6b7280" />
-          </Link>
-          <button onClick={() => dispatch(logout())} style={logoutButtonStyle}>
-            Выйти
-          </button>
-        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} />
       </nav>
 
       <input
@@ -1096,16 +1071,6 @@ const headerLinkStyle: React.CSSProperties = {
   fontSize: 14,
   color: '#4b5563',
   textDecoration: 'none',
-};
-
-const logoutButtonStyle: React.CSSProperties = {
-  border: '1px solid #e5e7eb',
-  background: '#ffffff',
-  color: '#374151',
-  borderRadius: 8,
-  padding: '8px 12px',
-  cursor: 'pointer',
-  fontSize: 13,
 };
 
 function getTemplateByDiagramType(diagramType: DiagramType): string {

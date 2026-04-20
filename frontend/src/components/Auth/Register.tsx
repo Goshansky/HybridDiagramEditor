@@ -5,6 +5,7 @@ import axios from 'axios';
 import { login, register } from '../../services/authApi';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { authFailure, authStart, authSuccess } from '../../store/authSlice';
+import styles from './Auth.module.css';
 
 export const Register: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -21,7 +22,7 @@ export const Register: React.FC = () => {
       await register({ email, password });
       const tokenData = await login({ email, password });
       dispatch(authSuccess({ token: tokenData.access_token, user: null }));
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       const message = axios.isAxiosError(err)
         ? (err.response?.data?.detail ?? 'Ошибка регистрации')
@@ -31,85 +32,37 @@ export const Register: React.FC = () => {
   };
 
   return (
-    <div style={containerStyle}>
-      <form onSubmit={handleSubmit} style={formStyle}>
-        <h2 style={{ margin: 0 }}>Регистрация</h2>
+    <div className={styles.page}>
+      <form onSubmit={handleSubmit} className={styles.card}>
+        <h2 className={styles.title}>Регистрация</h2>
         <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          style={inputStyle}
-          required
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            className={styles.input}
+            autoComplete="email"
+            required
         />
         <input
-          type="password"
-          placeholder="Пароль (6-72 символов)"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          style={inputStyle}
-          minLength={6}
-          maxLength={72}
-          required
+            type="password"
+            placeholder="Пароль (6-72 символов)"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className={styles.input}
+            autoComplete="new-password"
+            minLength={6}
+            maxLength={72}
+            required
         />
-        {error ? <div style={errorStyle}>{error}</div> : null}
-        <button type="submit" style={buttonStyle} disabled={status === 'loading'}>
+        {error ? <div className={styles.error}>{error}</div> : null}
+        <button type="submit" className={styles.button} disabled={status === 'loading'}>
           {status === 'loading' ? 'Создаем...' : 'Создать аккаунт'}
         </button>
-        <Link to="/login" style={linkStyle}>
-          Уже есть аккаунт? Войти
-        </Link>
+        <span>
+          Уже есть аккаунт? <Link to="/login" className={styles.link}>Войти</Link>
+        </span>
       </form>
     </div>
   );
-};
-
-const containerStyle: React.CSSProperties = {
-  minHeight: '100vh',
-  display: 'grid',
-  placeItems: 'center',
-  background: '#0f172a',
-  color: '#e5e7eb',
-};
-
-const formStyle: React.CSSProperties = {
-  width: 360,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-  background: '#020617',
-  border: '1px solid #1f2937',
-  borderRadius: 8,
-  padding: 20,
-};
-
-const inputStyle: React.CSSProperties = {
-  height: 40,
-  borderRadius: 6,
-  border: '1px solid #334155',
-  background: '#0f172a',
-  color: '#e5e7eb',
-  padding: '0 10px',
-};
-
-const buttonStyle: React.CSSProperties = {
-  height: 40,
-  borderRadius: 6,
-  border: 'none',
-  background: '#2563eb',
-  color: '#fff',
-  cursor: 'pointer',
-};
-
-const errorStyle: React.CSSProperties = {
-  background: '#7f1d1d',
-  borderRadius: 6,
-  padding: '8px 10px',
-  fontSize: 13,
-};
-
-const linkStyle: React.CSSProperties = {
-  color: '#93c5fd',
-  fontSize: 14,
-  textDecoration: 'none',
 };

@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
-import { listProjects } from '../services/projectApi';
 import { deleteDiagram, renameDiagram } from '../services/diagramApi';
-import { useAppDispatch, useAppSelector } from '../store';
+import { listProjects } from '../services/projectApi';
 import {
   removeProject,
   setCurrentDiagramType,
@@ -12,8 +11,9 @@ import {
   setSelectedDiagramId,
   upsertProject,
 } from '../store/diagramSlice';
+import { useAppDispatch, useAppSelector } from '../store';
 
-export const Projects: React.FC = () => {
+export const DashboardProjectsPanel: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const projects = useAppSelector((state) => state.diagram.projects);
@@ -46,9 +46,7 @@ export const Projects: React.FC = () => {
           : 'Не удалось загрузить проекты';
         setStatusMessage(message);
       } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       }
     };
     void loadProjects();
@@ -103,26 +101,21 @@ export const Projects: React.FC = () => {
   };
 
   return (
-    <div style={pageStyle}>
-      <div style={headerStyle}>
-        <h1 style={{ margin: 0, fontSize: 22 }}>Проекты</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Link to="/" style={linkButtonStyle}>
-            Редактор
-          </Link>
-          <Link to="/profile" style={linkButtonStyle}>
-            Профиль
-          </Link>
-        </div>
+    <div style={{ color: '#111827' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <h2 style={{ margin: 0, fontSize: 18 }}>Список проектов</h2>
+        <button style={buttonPrimaryStyle} onClick={() => navigate('/')}>
+          Новая диаграмма
+        </button>
       </div>
 
-      {loading ? <div style={{ color: '#93c5fd', marginBottom: 12 }}>Загрузка...</div> : null}
+      {loading ? <div style={{ color: '#1d4ed8', marginBottom: 12 }}>Загрузка...</div> : null}
       {statusMessage ? <div style={statusStyle}>{statusMessage}</div> : null}
 
       <div style={{ display: 'grid', gap: 10 }}>
         {projects.map((project) => (
           <div key={project.id} style={cardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'start' }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>{project.name}</div>
                 <div style={metaStyle}>
@@ -130,7 +123,7 @@ export const Projects: React.FC = () => {
                   {new Date(project.updatedAt).toLocaleString()} | Версий: {project.versionsCount}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'end' }}>
                 <button style={buttonStyle} onClick={() => onRename(project.id, project.name)}>
                   Переименовать
                 </button>
@@ -149,66 +142,45 @@ export const Projects: React.FC = () => {
   );
 };
 
-const pageStyle: React.CSSProperties = {
-  minHeight: '100vh',
-  padding: 16,
-  background: '#0f172a',
-  color: '#e5e7eb',
-  fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
-};
-
-const headerStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: 16,
-};
-
 const cardStyle: React.CSSProperties = {
-  background: '#020617',
-  border: '1px solid #1f2937',
-  borderRadius: 8,
+  background: '#ffffff',
+  border: '1px solid #e5e7eb',
+  borderRadius: 12,
   padding: 12,
+  boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)',
 };
 
 const metaStyle: React.CSSProperties = {
   marginTop: 6,
   fontSize: 13,
-  color: '#94a3b8',
+  color: '#6b7280',
 };
 
 const buttonStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  background: '#0f172a',
-  color: '#e5e7eb',
-  borderRadius: 6,
+  border: '1px solid #d1d5db',
+  background: '#fff',
+  color: '#111827',
+  borderRadius: 8,
   padding: '7px 10px',
   cursor: 'pointer',
 };
 
 const buttonDangerStyle: React.CSSProperties = {
   ...buttonStyle,
-  border: '1px solid #7f1d1d',
-  background: '#450a0a',
+  border: '1px solid #fecaca',
+  background: '#fef2f2',
+  color: '#991b1b',
 };
 
 const buttonPrimaryStyle: React.CSSProperties = {
   ...buttonStyle,
-  background: '#1d4ed8',
-};
-
-const linkButtonStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  background: '#020617',
-  color: '#e5e7eb',
-  borderRadius: 6,
-  padding: '7px 10px',
-  textDecoration: 'none',
-  fontSize: 13,
+  border: '1px solid #3b82f6',
+  background: '#3b82f6',
+  color: '#fff',
 };
 
 const statusStyle: React.CSSProperties = {
   marginBottom: 12,
-  color: '#93c5fd',
+  color: '#1d4ed8',
   fontSize: 13,
 };
