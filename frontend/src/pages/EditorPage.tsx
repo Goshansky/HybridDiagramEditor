@@ -234,6 +234,14 @@ export const EditorPage: React.FC = () => {
     }
   }, [dispatch, routeDiagramId, selectedDiagramId]);
 
+  useEffect(() => {
+    if (!statusMessage) return;
+    const timer = window.setTimeout(() => {
+      setStatusMessage((prev) => (prev === statusMessage ? null : prev));
+    }, 2200);
+    return () => window.clearTimeout(timer);
+  }, [statusMessage]);
+
   const downloadTextFile = (filename: string, content: string): void => {
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -632,7 +640,8 @@ export const EditorPage: React.FC = () => {
         minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        padding: '6px 16px 28px 16px',
+        width: '100%',
+        padding: 0,
         gap: '0',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
         background: '#ffffff',
@@ -699,13 +708,7 @@ export const EditorPage: React.FC = () => {
       />
 
       {statusMessage ? (
-        <div
-          style={{
-            fontSize: 12,
-            color: '#93c5fd',
-            marginTop: -8,
-          }}
-        >
+        <div style={statusToastStyle} aria-live="polite">
           {statusMessage}
         </div>
       ) : null}
@@ -1071,6 +1074,23 @@ const headerLinkStyle: React.CSSProperties = {
   fontSize: 14,
   color: '#4b5563',
   textDecoration: 'none',
+};
+
+const statusToastStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: 20,
+  right: 20,
+  zIndex: 10000,
+  maxWidth: 420,
+  fontSize: 13,
+  lineHeight: 1.35,
+  color: '#ffffff',
+  background: '#2563eb',
+  border: '1px solid rgba(255,255,255,0.18)',
+  borderRadius: 10,
+  boxShadow: '0 10px 26px rgba(15, 23, 42, 0.25)',
+  padding: '10px 14px',
+  pointerEvents: 'none',
 };
 
 function getTemplateByDiagramType(diagramType: DiagramType): string {

@@ -337,16 +337,6 @@ export const SidePanel: React.FC<SidePanelProps> = ({
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <ActionButton
-            icon={<FileUp size={16} />}
-            label="Открыть файл"
-            onClick={onOpenFile}
-          />
-          <ActionButton
-            icon={<Save size={16} />}
-            label="Сохранить код"
-            onClick={onSaveCode}
-          />
-          <ActionButton
             icon={<Image size={16} />}
             label="Сохранить как SVG"
             onClick={onSaveSvg}
@@ -355,16 +345,6 @@ export const SidePanel: React.FC<SidePanelProps> = ({
             icon={<Image size={16} />}
             label="Сохранить как изображение"
             onClick={onSaveImage}
-          />
-          <ActionButton
-            icon={<Settings size={16} />}
-            label="Добавить узел"
-            onClick={onAddNode}
-          />
-          <ActionButton
-            icon={<Settings size={16} />}
-            label="Добавить связь"
-            onClick={onAddEdge}
           />
           <ActionButton
             icon={<GitBranch size={16} />}
