@@ -30,6 +30,7 @@ interface DiagramCanvasProps {
   disableNodeDrag?: boolean;
   onNodeDoubleClick?: (id: string) => void;
   onEdgeDoubleClick?: (edge: { from: string; to: string; label?: string; type: 'arrow' | 'line' }) => void;
+  gridSnap?: boolean;
 }
 
 type NodeShape = 'rect' | 'circle' | 'diamond' | 'oval' | 'parallelogram' | 'cloud';
@@ -165,6 +166,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   disableNodeDrag = false,
   onNodeDoubleClick,
   onEdgeDoubleClick,
+  gridSnap = true,
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const rootGroupRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
@@ -767,6 +769,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         const k = d3.zoomTransform(svg).k || 1;
         d.x += event.dx / k;
         d.y += event.dy / k;
+        if (gridSnap) {
+          d.x = Math.round(d.x / 20) * 20;
+          d.y = Math.round(d.y / 20) * 20;
+        }
         d3.select<SVGGElement, PositionedNode>(this).attr(
           'transform',
           `translate(${d.x},${d.y})`,
@@ -776,6 +782,14 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .on('end', function (event, d) {
         isNodeDraggingRef.current = false;
         edgeDragDrawRef.current = 'orthogonal';
+        if (gridSnap) {
+          d.x = Math.round(d.x / 20) * 20;
+          d.y = Math.round(d.y / 20) * 20;
+          d3.select<SVGGElement, PositionedNode>(this).attr(
+            'transform',
+            `translate(${d.x},${d.y})`,
+          );
+        }
         d3.select<SVGGElement, PositionedNode>(this)
           .select<
             SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
@@ -814,6 +828,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     selectedNodeId,
     selectedEdgeIndex,
     disableNodeDrag,
+    gridSnap,
     onNodeDoubleClick,
     onEdgeDoubleClick,
   ]);

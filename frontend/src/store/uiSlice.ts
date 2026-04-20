@@ -1,15 +1,23 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 export type SelectedElementType = 'node' | 'edge';
+export type UiTheme = 'light' | 'dark';
 
 export interface UiState {
   selectedElementId: string | null;
   selectedElementType: SelectedElementType | null;
+  gridSnap: boolean;
+  theme: UiTheme;
 }
 
 const initialState: UiState = {
   selectedElementId: null,
   selectedElementType: null,
+  gridSnap: true,
+  theme:
+    (typeof window !== 'undefined'
+      ? (window.localStorage.getItem('ui_theme') as UiTheme | null)
+      : null) ?? 'light',
 };
 
 function parseEdgeIndex(id: string): number | null {
@@ -34,10 +42,36 @@ const uiSlice = createSlice({
       state.selectedElementId = null;
       state.selectedElementType = null;
     },
+    setGridSnap(state, action: PayloadAction<boolean>) {
+      state.gridSnap = action.payload;
+    },
+    toggleGridSnap(state) {
+      state.gridSnap = !state.gridSnap;
+    },
+    setTheme(state, action: PayloadAction<UiTheme>) {
+      state.theme = action.payload;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('ui_theme', action.payload);
+      }
+    },
+    toggleTheme(state) {
+      state.theme = state.theme === 'light' ? 'dark' : 'light';
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('ui_theme', state.theme);
+      }
+    },
   },
 });
 
-export const { setSelectedNode, setSelectedEdge, clearSelectedElement } = uiSlice.actions;
+export const {
+  setSelectedNode,
+  setSelectedEdge,
+  clearSelectedElement,
+  setGridSnap,
+  toggleGridSnap,
+  setTheme,
+  toggleTheme,
+} = uiSlice.actions;
 export const uiReducer = uiSlice.reducer;
 
 export function getSelectedNodeIdFromState(ui: UiState): string | null {

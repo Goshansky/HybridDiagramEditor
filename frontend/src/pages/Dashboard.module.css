@@ -2,15 +2,15 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #f3f4f6;
-  color: #111827;
+  background: var(--app-bg);
+  color: var(--text-main);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .header {
   height: 60px;
-  background: #ffffff;
-  border-bottom: 1px solid #e9ecef;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-soft);
   box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
   display: flex;
   align-items: center;
@@ -47,8 +47,8 @@
 
 .sidebar {
   width: 260px;
-  background: #f8f9fa;
-  border-right: 1px solid #e9ecef;
+  background: color-mix(in srgb, var(--surface) 90%, #f8f9fa 10%);
+  border-right: 1px solid var(--border-soft);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -86,8 +86,8 @@
 }
 
 .contentCard {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
   border-radius: 14px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
   padding: 20px;
@@ -113,8 +113,8 @@
 
 .footer {
   height: 50px;
-  background: #f8f9fa;
-  border-top: 1px solid #e9ecef;
+  background: color-mix(in srgb, var(--surface) 92%, #f8f9fa 8%);
+  border-top: 1px solid var(--border-soft);
   display: flex;
   align-items: center;
   justify-content: space-between;

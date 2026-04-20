@@ -3,12 +3,16 @@ import { usePanelRef } from 'react-resizable-panels';
 import axios from 'axios';
 import {
   BookOpen,
+  FilePlus2,
+  Grid3X3,
   GitBranch,
   LayoutGrid,
   Link2,
   Maximize,
+  Moon,
   MoreVertical,
   Plus,
+  Sun,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -24,6 +28,8 @@ import {
 } from '../../parser';
 import { AddEdgeDialog } from '../components/AddEdgeDialog';
 import { AddNodeDialog, type FlowNodeShape } from '../components/AddNodeDialog';
+import { BurgerDrawer } from '../components/BurgerDrawer';
+import drawerStyles from '../components/BurgerDrawer.module.css';
 import { CodeEditor } from '../components/CodeEditor';
 import { DiagramCanvas } from '../components/DiagramCanvas';
 import { EdgeEditor } from '../components/EdgeEditor';
@@ -56,14 +62,17 @@ import {
   clearSelectedElement,
   getSelectedEdgeIndexFromState,
   getSelectedNodeIdFromState,
+  setGridSnap,
   setSelectedEdge,
   setSelectedNode,
+  toggleTheme,
 } from '../store/uiSlice';
 
 const initialExample = `graph TD
   A[Начало] --> B{Условие}
   B -->|Да| C[Действие 1]
   B -->|Нет| D[Действие 2]`;
+const LAST_DIAGRAM_ID_STORAGE_KEY = 'hde:lastDiagramId';
 
 export const EditorPage: React.FC = () => {
   const [source, setSource] = useState(initialExample);
@@ -78,6 +87,8 @@ export const EditorPage: React.FC = () => {
   const [pendingNodePos, setPendingNodePos] = useState<{ x: number; y: number } | null>(null);
   const [showAddNodeDialog, setShowAddNodeDialog] = useState(false);
   const [showAddEdgeDialog, setShowAddEdgeDialog] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerVersionsLoading, setDrawerVersionsLoading] = useState(false);
   const [edgeDraft, setEdgeDraft] = useState<{ from: string; to: string } | null>(null);
   const [edgeAddModeFrom, setEdgeAddModeFrom] = useState<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -97,21 +108,54 @@ export const EditorPage: React.FC = () => {
   const useAutoLayout = useAppSelector((state) => state.diagram.useAutoLayout);
   /** Последний dagre-снимок рёбер (points + styles) для ручного режима без повторного layout. */
   const dagreEdgeCacheRef = useRef<ReturnType<typeof snapshotEdgesForLayoutCache> | null>(null);
+  /** Для первого автозапуска: открыть выбранный проект сразу с последней версией. */
+  const autoLoadLatestForDiagramIdRef = useRef<number | null>(null);
   const selectedCanvasNodeId = useAppSelector((state) => getSelectedNodeIdFromState(state.ui));
   const selectedCanvasEdgeIndex = useAppSelector((state) =>
     getSelectedEdgeIndexFromState(state.ui),
   );
   const hasCanvasSelection = useAppSelector((state) => state.ui.selectedElementType !== null);
+  const gridSnap = useAppSelector((state) => state.ui.gridSnap);
+  const theme = useAppSelector((state) => state.ui.theme);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const location = useLocation();
   const routeDiagramId = (location.state as { diagramId?: number } | null)?.diagramId;
 
-  const loadDiagramById = async (diagramId: number): Promise<void> => {
+  const loadDiagramById = async (
+    diagramId: number,
+    options?: { loadLatestVersion?: boolean },
+  ): Promise<void> => {
     try {
       const diagram = await getDiagram(diagramId);
-      setSource(diagram.content);
       dispatch(enableAutoLayout());
       dispatch(setCurrentDiagramType(diagram.diagram_type));
+      localStorage.setItem(LAST_DIAGRAM_ID_STORAGE_KEY, String(diagramId));
+
+      if (options?.loadLatestVersion) {
+        const versionItems = await listVersions(diagramId);
+        const mapped = versionItems.map((version) => ({
+          id: version.id,
+          diagramId: version.diagram_id,
+          versionNumber: version.version_number,
+          createdAt: version.created_at,
+          content: version.content,
+        }));
+        dispatch(setVersions(mapped));
+        if (mapped.length > 0) {
+          const latest = [...mapped].sort((a, b) => b.versionNumber - a.versionNumber)[0];
+          setSelectedVersionId(latest.id);
+          setSource(latest.content);
+          setStatusMessage(`Загружена последняя версия v${latest.versionNumber} для "${diagram.name}"`);
+        } else {
+          setSelectedVersionId(null);
+          dispatch(clearVersions());
+          setSource(diagram.content);
+          setStatusMessage(`Загружена диаграмма "${diagram.name}"`);
+        }
+        return;
+      }
+
+      setSource(diagram.content);
       setSelectedVersionId(null);
       dispatch(clearVersions());
       setStatusMessage(`Загружена диаграмма "${diagram.name}"`);
@@ -192,6 +236,28 @@ export const EditorPage: React.FC = () => {
             })),
           ),
         );
+
+        if (typeof routeDiagramId === 'number') {
+          return;
+        }
+        if (diagrams.length === 0) {
+          return;
+        }
+        if (selectedDiagramId !== null) {
+          return;
+        }
+
+        const storedIdRaw = localStorage.getItem(LAST_DIAGRAM_ID_STORAGE_KEY);
+        const storedId = storedIdRaw ? Number(storedIdRaw) : NaN;
+        const fromStorage = diagrams.find((d) => d.id === storedId);
+        const byUpdated = [...diagrams].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+        )[0];
+        const target = fromStorage ?? byUpdated;
+        if (!target) return;
+
+        autoLoadLatestForDiagramIdRef.current = target.id;
+        dispatch(setSelectedDiagramId(target.id));
       } catch (error) {
         if (!mounted) return;
         const message = axios.isAxiosError(error)
@@ -204,7 +270,7 @@ export const EditorPage: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [dispatch]);
+  }, [dispatch, routeDiagramId, selectedDiagramId]);
 
   useEffect(() => {
     let mounted = true;
@@ -226,11 +292,13 @@ export const EditorPage: React.FC = () => {
   useEffect(() => {
     if (typeof routeDiagramId === 'number') {
       dispatch(setSelectedDiagramId(routeDiagramId));
-      void loadDiagramById(routeDiagramId);
+      void loadDiagramById(routeDiagramId, { loadLatestVersion: true });
       return;
     }
     if (selectedDiagramId !== null) {
-      void loadDiagramById(selectedDiagramId);
+      const shouldLoadLatest = autoLoadLatestForDiagramIdRef.current === selectedDiagramId;
+      autoLoadLatestForDiagramIdRef.current = null;
+      void loadDiagramById(selectedDiagramId, { loadLatestVersion: shouldLoadLatest });
     }
   }, [dispatch, routeDiagramId, selectedDiagramId]);
 
@@ -334,6 +402,7 @@ export const EditorPage: React.FC = () => {
           }),
         );
         dispatch(setSelectedDiagramId(created.id));
+        localStorage.setItem(LAST_DIAGRAM_ID_STORAGE_KEY, String(created.id));
         setStatusMessage(`Создана диаграмма "${created.name}"`);
         return;
       }
@@ -374,14 +443,15 @@ export const EditorPage: React.FC = () => {
     }
   };
 
-  const loadVersionsForCurrentDiagram = async (): Promise<void> => {
-    if (selectedDiagramId === null) {
+  const loadVersionsForDiagramId = async (diagramId: number | null): Promise<void> => {
+    if (diagramId === null) {
       dispatch(clearVersions());
       setSelectedVersionId(null);
       return;
     }
+    setDrawerVersionsLoading(true);
     try {
-      const versionItems = await listVersions(selectedDiagramId);
+      const versionItems = await listVersions(diagramId);
       dispatch(
         setVersions(
           versionItems.map((version) => ({
@@ -398,7 +468,13 @@ export const EditorPage: React.FC = () => {
         ? (error.response?.data?.detail ?? 'Не удалось загрузить версии')
         : 'Не удалось загрузить версии';
       setStatusMessage(message);
+    } finally {
+      setDrawerVersionsLoading(false);
     }
+  };
+
+  const loadVersionsForCurrentDiagram = async (): Promise<void> => {
+    await loadVersionsForDiagramId(selectedDiagramId);
   };
 
   const handleSelectVersion = (versionId: number | null): void => {
@@ -497,6 +573,7 @@ export const EditorPage: React.FC = () => {
       );
       dispatch(setCurrentDiagramType(created.diagram_type));
       dispatch(setSelectedDiagramId(created.id));
+      localStorage.setItem(LAST_DIAGRAM_ID_STORAGE_KEY, String(created.id));
       dispatch(enableAutoLayout());
       setSource(created.content || template);
       setSelectedVersionId(null);
@@ -661,6 +738,115 @@ export const EditorPage: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <BurgerDrawer
+            title="Меню редактора"
+            open={drawerOpen}
+            onOpen={() => setDrawerOpen(true)}
+            onClose={() => setDrawerOpen(false)}
+          >
+            <button
+              className={drawerStyles.itemButton}
+              onClick={() => {
+                void handleCreateDiagram();
+              }}
+            >
+              <FilePlus2 size={16} />
+              <span>Новая диаграмма</span>
+            </button>
+
+            <div className={drawerStyles.field}>
+              <label className={drawerStyles.label}>Выбрать проект</label>
+              <select
+                className={drawerStyles.select}
+                value={
+                  selectedDiagramId !== null
+                    ? String(selectedDiagramId)
+                    : (diagramItems.length > 0 ? String(diagramItems[0].id) : '-')
+                }
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === '-') {
+                    return;
+                  }
+                  const id = Number(value);
+                  dispatch(setSelectedDiagramId(id));
+                  void loadDiagramById(id);
+                  void loadVersionsForDiagramId(id);
+                }}
+              >
+                {diagramItems.length > 0 ? (
+                  diagramItems.map((diagram) => (
+                    <option key={diagram.id} value={diagram.id}>
+                      {diagram.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="-">-</option>
+                )}
+              </select>
+            </div>
+
+            <div className={drawerStyles.field}>
+              <label className={drawerStyles.label}>Выбрать версию</label>
+              <select
+                className={drawerStyles.select}
+                value={
+                  selectedVersionId !== null
+                    ? String(selectedVersionId)
+                    : (versions.length > 0 ? String(versions[0].id) : '-')
+                }
+                disabled={selectedDiagramId === null}
+                onFocus={() => {
+                  void loadVersionsForCurrentDiagram();
+                }}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  const nextVersionId = value && value !== '-' ? Number(value) : null;
+                  handleSelectVersion(nextVersionId);
+                }}
+              >
+                {drawerVersionsLoading ? (
+                  <option value="-">Загрузка версий...</option>
+                ) : versions.length > 0 ? (
+                  versions.map((version) => (
+                    <option key={version.id} value={version.id}>
+                      v{version.versionNumber}
+                    </option>
+                  ))
+                ) : (
+                  <option value="-">-</option>
+                )}
+              </select>
+              <button
+                className={drawerStyles.itemButton}
+                onClick={() => {
+                  void restoreSelectedVersion();
+                }}
+                disabled={selectedDiagramId === null || selectedVersionId === null}
+              >
+                <GitBranch size={16} />
+                <span>Сохранить версию</span>
+              </button>
+            </div>
+
+            <button className={drawerStyles.itemButton} onClick={() => dispatch(toggleTheme())}>
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+              <span>Тема: {theme === 'light' ? 'Светлая' : 'Темная'}</span>
+            </button>
+
+            <label className={drawerStyles.toggle}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Grid3X3 size={16} />
+                Привязка к сетке
+              </span>
+              <input
+                type="checkbox"
+                checked={gridSnap}
+                onChange={(event) => dispatch(setGridSnap(event.target.checked))}
+              />
+            </label>
+          </BurgerDrawer>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div
               style={{
@@ -727,39 +913,8 @@ export const EditorPage: React.FC = () => {
                 sidebarPanelRef.current?.expand();
                 setSidebarCollapsed(false);
               }}
-              diagrams={diagramItems}
-              selectedDiagramId={selectedDiagramId}
-              versions={versions}
-              selectedVersionId={selectedVersionId}
-              onSelectDiagram={(diagramId) => {
-                dispatch(setSelectedDiagramId(diagramId));
-                if (diagramId === null) {
-                  dispatch(clearVersions());
-                  setSelectedVersionId(null);
-                  setStatusMessage('Режим новой диаграммы');
-                  return;
-                }
-                void loadDiagramById(diagramId);
-              }}
-              onCreateDiagram={() => {
-                void handleCreateDiagram();
-              }}
-              onLoadVersions={() => {
-                void loadVersionsForCurrentDiagram();
-              }}
-              onSelectVersion={handleSelectVersion}
-              onRestoreSelectedVersion={() => {
-                void restoreSelectedVersion();
-              }}
               diagramType={currentDiagramType}
               onDiagramTypeChange={handleSelectDiagramType}
-              onAddNode={() => beginAddNode()}
-              onAddEdge={beginAddEdge}
-              onOpenFile={openFile}
-              onSaveCode={() => {
-                downloadTextFile('diagram.mmd', source);
-                setStatusMessage('Код сохранен');
-              }}
               onSaveSvg={saveAsSvg}
               onSaveImage={() => {
                 void saveAsPng();
@@ -896,6 +1051,7 @@ export const EditorPage: React.FC = () => {
                 canvasId="diagram-canvas"
                 zoomCommand={zoomCommandStable}
                 disableNodeDrag={currentDiagramType === 'sequence'}
+                gridSnap={gridSnap}
                 selectedNodeId={selectedCanvasNodeId ?? undefined}
                 selectedEdgeIndex={selectedCanvasEdgeIndex}
                 onSelectNode={handleCanvasNodeSelect}

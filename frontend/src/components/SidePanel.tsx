@@ -1,11 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   X,
-  Settings,
-  Palette,
-  Grid3X3,
-  FileUp,
-  Save,
   Image,
   GitBranch,
   RotateCcw,
@@ -16,21 +11,8 @@ import {
 import type { DiagramType } from '../services/diagramApi';
 
 interface SidePanelProps {
-  diagrams: Array<{ id: number; name: string }>;
-  selectedDiagramId: number | null;
-  versions: Array<{ id: number; versionNumber: number; createdAt: string }>;
-  selectedVersionId: number | null;
-  onSelectDiagram: (diagramId: number | null) => void;
-  onCreateDiagram: () => void;
-  onLoadVersions: () => void;
-  onSelectVersion: (versionId: number | null) => void;
-  onRestoreSelectedVersion: () => void;
   diagramType: DiagramType;
   onDiagramTypeChange: (type: DiagramType) => void;
-  onAddNode: () => void;
-  onAddEdge: () => void;
-  onOpenFile: () => void;
-  onSaveCode: () => void;
   onSaveSvg: () => void;
   onSaveImage: () => void;
   onSaveVersion: () => void;
@@ -44,21 +26,8 @@ interface SidePanelProps {
 }
 
 export const SidePanel: React.FC<SidePanelProps> = ({
-  diagrams,
-  selectedDiagramId,
-  versions,
-  selectedVersionId,
-  onSelectDiagram,
-  onCreateDiagram,
-  onLoadVersions,
-  onSelectVersion,
-  onRestoreSelectedVersion,
   diagramType,
   onDiagramTypeChange,
-  onAddNode,
-  onAddEdge,
-  onOpenFile,
-  onSaveCode,
   onSaveSvg,
   onSaveImage,
   onSaveVersion,
@@ -69,8 +38,6 @@ export const SidePanel: React.FC<SidePanelProps> = ({
   onExpandSidebar,
   isSyncing = false,
 }) => {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  const [gridSnap, setGridSnap] = useState(true);
 
   if (collapsed) {
     return (
@@ -176,30 +143,6 @@ export const SidePanel: React.FC<SidePanelProps> = ({
         </button>
       ) : null}
 
-      <div>
-        <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#374151', marginBottom: '8px' }}>
-          Диаграмма
-        </label>
-        <select
-          value={selectedDiagramId ?? ''}
-          onChange={(event) => {
-            const value = event.target.value;
-            onSelectDiagram(value ? Number(value) : null);
-          }}
-          style={selectStyle}
-        >
-          <option value="">Новая диаграмма</option>
-          {diagrams.map((diagram) => (
-            <option key={diagram.id} value={diagram.id}>
-              {diagram.name}
-            </option>
-          ))}
-        </select>
-        <button style={{ ...actionButtonStyle, marginTop: '8px' }} onClick={onCreateDiagram}>
-          Создать новую диаграмму
-        </button>
-      </div>
-
       {/* Diagram Type Selector */}
       <div>
         <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#374151', marginBottom: '8px' }}>
@@ -233,101 +176,6 @@ export const SidePanel: React.FC<SidePanelProps> = ({
           <option value="class">Диаграмма классов</option>
           <option value="er">ER-диаграмма</option>
         </select>
-      </div>
-
-      <div>
-        <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#374151', marginBottom: '8px' }}>
-          Версии
-        </label>
-        <select
-          value={selectedVersionId ?? ''}
-          onFocus={onLoadVersions}
-          onChange={(event) => {
-            const value = event.target.value;
-            onSelectVersion(value ? Number(value) : null);
-          }}
-          style={selectStyle}
-          disabled={selectedDiagramId === null}
-        >
-          <option value="">Выбери версию</option>
-          {versions.map((version) => (
-            <option key={version.id} value={version.id}>
-              v{version.versionNumber} ({new Date(version.createdAt).toLocaleString()})
-            </option>
-          ))}
-        </select>
-        <button
-          style={{ ...actionButtonStyle, marginTop: '8px' }}
-          onClick={onRestoreSelectedVersion}
-          disabled={selectedDiagramId === null || selectedVersionId === null}
-        >
-          Восстановить эту версию
-        </button>
-      </div>
-
-      {/* Settings */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          <Settings size={16} color="#4b5563" />
-          <h3 style={{ fontSize: '14px', fontWeight: 500, color: '#374151', margin: 0 }}>
-            Настройки
-          </h3>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* Theme selector */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Palette size={16} color="#6b7280" />
-              <span style={{ fontSize: '14px', color: '#4b5563' }}>Тема</span>
-            </div>
-            <select
-              value={theme}
-              onChange={(e) => setTheme(e.target.value as 'light' | 'dark')}
-              style={{
-                padding: '6px 8px',
-                background: '#ffffff',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '12px',
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="light">Светлая</option>
-              <option value="dark">Темная</option>
-            </select>
-          </div>
-
-          {/* Grid snap */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Grid3X3 size={16} color="#6b7280" />
-              <span style={{ fontSize: '14px', color: '#4b5563' }}>Привязка к сетке</span>
-            </div>
-            <button
-              onClick={() => setGridSnap(!gridSnap)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 500,
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                background: gridSnap ? '#4f46e5' : '#e5e7eb',
-                color: gridSnap ? '#ffffff' : '#374151',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = '0.9';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = '1';
-              }}
-            >
-              {gridSnap ? 'Вкл' : 'Выкл'}
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Actions */}
@@ -398,28 +246,6 @@ export const SidePanel: React.FC<SidePanelProps> = ({
       `}</style>
     </div>
   );
-};
-
-const selectStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '8px 12px',
-  background: '#ffffff',
-  border: '1px solid #d1d5db',
-  borderRadius: '8px',
-  fontSize: '14px',
-  outline: 'none',
-  cursor: 'pointer',
-};
-
-const actionButtonStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '8px 12px',
-  border: '1px solid #d1d5db',
-  borderRadius: '8px',
-  background: '#ffffff',
-  color: '#374151',
-  fontSize: '14px',
-  cursor: 'pointer',
 };
 
 interface ActionButtonProps {
