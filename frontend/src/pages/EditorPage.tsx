@@ -74,9 +74,9 @@ const initialExample = `graph TD
   B -->|Нет| D[Действие 2]`;
 const LAST_DIAGRAM_ID_STORAGE_KEY = 'hde:lastDiagramId';
 
-/** Flowchart и class: dagre в layoutService + %% layout хинты в коде. */
+/** Flowchart, class, er: dagre в layoutService + %% layout хинты в коде. */
 function isDagreLayoutDiagramType(t: DiagramType): boolean {
-  return t === 'flowchart' || t === 'class';
+  return t === 'flowchart' || t === 'class' || t === 'er';
 }
 
 export const EditorPage: React.FC = () => {

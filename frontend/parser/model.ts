@@ -1,3 +1,4 @@
+import type { ERDiagramData, ERDiagramEntity } from './erModel';
 import type { SequenceDiagramData } from './sequenceModel';
 import type {
   ClassDefStatementAst,
@@ -15,7 +16,7 @@ import type {
 } from './ast';
 
 /** Узел блок-схемы или «коробка класса» для classDiagram. */
-export type DiagramNodeShape = NodeShape | 'class_box';
+export type DiagramNodeShape = NodeShape | 'class_box' | 'er_box';
 
 export type ClassVisibility = '+' | '-' | '#' | '~';
 
@@ -71,6 +72,8 @@ export interface DiagramNodeModel {
   height?: number;
   /** Для `shape === 'class_box'`: содержимое класса. */
   classBox?: ClassBoxModel;
+  /** Для `shape === 'er_box'`: сущность ER. */
+  erEntity?: ERDiagramEntity;
 }
 
 export type EdgeType = 'arrow' | 'line';
@@ -92,6 +95,9 @@ export interface DiagramEdgeModel {
   classRelation?: ClassRelationKind;
   fromMultiplicity?: string;
   toMultiplicity?: string;
+  /** erDiagram: кардинальность у левой/правой сущности (текст ||, o{, …). */
+  erLeftCard?: string;
+  erRightCard?: string;
 }
 
 /** Подграф для рамки на холсте (узлы — транзитивно из тела и вложенных subgraph). */
@@ -126,6 +132,8 @@ export interface DiagramModel {
   classNotes?: ClassNoteModel[];
   /** Полная модель sequenceDiagram (если задана — рендер по ней, не по edges). */
   sequenceData?: SequenceDiagramData;
+  /** Полная модель erDiagram (дублирует сущности в nodes с erEntity). */
+  erData?: ERDiagramData;
 }
 
 function collectNodeIdsFromBody(body: StatementAst[]): string[] {

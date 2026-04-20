@@ -21,7 +21,15 @@ export type {
   SequenceArrowKind,
 } from './sequenceModel';
 export { getOrderedParticipantIds } from './sequenceModel';
-export { SEQUENCE_DIAGRAM_KEYWORDS } from './tokenizer';
+export type {
+  ERDiagramData,
+  ERDiagramEntity,
+  ERDiagramRelationship,
+  EntityAttribute,
+} from './erModel';
+export { estimateErEntitySize } from './erModel';
+export { parseErDiagram, parseErDiagramAst, parseRelationshipLine } from './erDiagram';
+export { ER_DIAGRAM_KEYWORDS, SEQUENCE_DIAGRAM_KEYWORDS } from './tokenizer';
 
 export type {
   ClassBoxModel,
@@ -73,7 +81,7 @@ export function parseMermaidByType(
     return parseSequenceDiagram(source);
   }
   if (diagramType === 'er') {
-    return parseErDiagram(source);
+    return parseErDiagram(source, useAutoLayout);
   }
   return parseFlowchart(source, useAutoLayout);
 }

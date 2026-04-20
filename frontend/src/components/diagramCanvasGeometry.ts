@@ -12,7 +12,8 @@ export type NodeShape =
   | 'trapezoid_slash'
   | 'trapezoid_backslash'
   | 'flag'
-  | 'class_box';
+  | 'class_box'
+  | 'er_box';
 
 export interface PositionedNodeLike {
   id: string;
@@ -144,6 +145,7 @@ function boundaryPointToward(
   switch (shape) {
     case 'rect':
     case 'class_box':
+    case 'er_box':
       return rayExitAxisAlignedRect(cx, cy, hw, hh, ux, uy);
     case 'circle': {
       const r = Math.min(w, h) / 2;

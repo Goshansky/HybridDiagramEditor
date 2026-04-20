@@ -20,7 +20,9 @@ export type TokenType =
   | 'NEWLINE'
   | 'EOF'
   /** Ключевые слова sequenceDiagram (participant, alt, loop, …). */
-  | 'SEQ_KW';
+  | 'SEQ_KW'
+  /** Ключевые слова erDiagram (типы, PK/FK/UK, erDiagram). */
+  | 'ER_KW';
 
 export interface BaseToken {
   type: TokenType;
@@ -35,6 +37,23 @@ export interface BaseToken {
 export type Token = BaseToken;
 
 /** Распознаётся как SEQ_KW в readIdentifierLike (подсветка / будущий AST). */
+/** Подсветка erDiagram: типы атрибутов, ключи, заголовок. */
+export const ER_DIAGRAM_KEYWORDS = new Set([
+  'erdiagram',
+  'int',
+  'string',
+  'date',
+  'decimal',
+  'boolean',
+  'text',
+  'float',
+  'double',
+  'timestamp',
+  'pk',
+  'fk',
+  'uk',
+]);
+
 export const SEQUENCE_DIAGRAM_KEYWORDS = new Set([
   'sequencediagram',
   'participant',
@@ -484,6 +503,9 @@ export class Lexer {
       value = (lower === 'tb' || lower === 'td' ? 'TD' : lower.toUpperCase()) as Direction;
     } else if (SEQUENCE_DIAGRAM_KEYWORDS.has(lower)) {
       type = 'SEQ_KW';
+      value = lower;
+    } else if (ER_DIAGRAM_KEYWORDS.has(lower)) {
+      type = 'ER_KW';
       value = lower;
     }
 

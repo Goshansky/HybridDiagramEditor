@@ -1,6 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
-import type { ClassBoxModel, ClassRelationKind, DiagramModel } from '../../parser';
+import type {
+  ClassBoxModel,
+  ClassRelationKind,
+  DiagramModel,
+  ERDiagramEntity,
+} from '../../parser';
 import {
   ARROW_TIP_GAP,
   computeEdgeEndpointsBetweenNodes,
@@ -49,7 +54,8 @@ type NodeShape =
   | 'trapezoid_slash'
   | 'trapezoid_backslash'
   | 'flag'
-  | 'class_box';
+  | 'class_box'
+  | 'er_box';
 
 interface PositionedNode {
   id: string;
@@ -61,6 +67,7 @@ interface PositionedNode {
   width: number;
   height: number;
   classBox?: ClassBoxModel;
+  erEntity?: ERDiagramEntity;
 }
 
 interface PositionedEdge {
@@ -85,6 +92,8 @@ interface PositionedEdge {
   classRelation?: ClassRelationKind;
   fromMultiplicity?: string;
   toMultiplicity?: string;
+  erLeftCard?: string;
+  erRightCard?: string;
 }
 
 const NODE_WIDTH = 110;
@@ -109,7 +118,11 @@ function selectNodeShapeElements<G extends SVGGElement>(
       PositionedNode
     >('rect,polygon,circle,ellipse,path')
     .filter(function (this: SVGElement, d: PositionedNode) {
-      return d.shape !== 'class_box' && !this.classList.contains('connect-port');
+      return (
+      d.shape !== 'class_box' &&
+      d.shape !== 'er_box' &&
+      !this.classList.contains('connect-port')
+    );
     });
 }
 
@@ -249,6 +262,80 @@ function paintClassBoxNode(
   }
 }
 
+const ER_ATTR_LINE = 14;
+
+function paintErBoxNode(
+  g: d3.Selection<SVGGElement, PositionedNode, null, undefined>,
+  d: PositionedNode,
+): void {
+  const ent = d.erEntity;
+  if (!ent || d.shape !== 'er_box') return;
+  g.selectAll<SVGTextElement>('text').remove();
+  g.selectAll<
+    SVGRectElement | SVGPolygonElement | SVGEllipseElement | SVGPathElement | SVGLineElement
+  >('rect,polygon,ellipse,path,line')
+    .remove();
+  g.selectAll<SVGCircleElement>('circle').each(function () {
+    const el = this as SVGCircleElement;
+    if (!el.classList.contains('connect-port')) {
+      d3.select(el).remove();
+    }
+  });
+  const w = d.width;
+  const h = d.height;
+  const fill = d.styles.fill ?? '#f8fafc';
+  const stroke = d.styles.stroke ?? '#334155';
+  const swRaw = d.styles['stroke-width'];
+  const sw = swRaw ? Number.parseFloat(String(swRaw).replace(/px/gi, '')) || 1.5 : 1.5;
+  g.insert('rect', 'circle.connect-port')
+    .attr('x', -w / 2)
+    .attr('y', -h / 2)
+    .attr('width', w)
+    .attr('height', h)
+    .attr('rx', 4)
+    .attr('ry', 4)
+    .attr('fill', fill)
+    .attr('stroke', stroke)
+    .attr('stroke-width', sw);
+  const headerH = 22;
+  g.insert('rect', 'circle.connect-port')
+    .attr('x', -w / 2)
+    .attr('y', -h / 2)
+    .attr('width', w)
+    .attr('height', headerH)
+    .attr('fill', '#e2e8f0')
+    .attr('stroke', stroke)
+    .attr('stroke-width', sw);
+  g.insert('line', 'circle.connect-port')
+    .attr('x1', -w / 2)
+    .attr('x2', w / 2)
+    .attr('y1', -h / 2 + headerH)
+    .attr('y2', -h / 2 + headerH)
+    .attr('stroke', stroke)
+    .attr('stroke-width', 1);
+  g.insert('text', 'circle.connect-port')
+    .attr('text-anchor', 'middle')
+    .attr('y', -h / 2 + 15)
+    .style('font-size', '12px')
+    .style('font-weight', '700')
+    .style('fill', d.styles.color ?? '#0f172a')
+    .text(ent.id.length > 28 ? `${ent.id.slice(0, 28)}…` : ent.id);
+  let ty = -h / 2 + headerH + 12;
+  for (const a of ent.attributes) {
+    const line = `${a.type} ${a.name}${a.keyType ? ` ${a.keyType}` : ''}`;
+    const display = line.length > 52 ? `${line.slice(0, 52)}…` : line;
+    g.insert('text', 'circle.connect-port')
+      .attr('x', -w / 2 + 8)
+      .attr('y', ty)
+      .attr('text-anchor', 'start')
+      .style('font-size', '11px')
+      .style('font-family', 'ui-monospace, Consolas, monospace')
+      .style('fill', '#334155')
+      .text(display);
+    ty += ER_ATTR_LINE;
+  }
+}
+
 function nodeHeightForLabel(label: string, explicitHeight?: number): number {
   if (typeof explicitHeight === 'number' && explicitHeight > 0) {
     return explicitHeight;
@@ -328,6 +415,42 @@ function computeLayout(
   }
 
   return positions;
+}
+
+/** Убрать дубликаты подряд (dagre иногда даёт совпадающие точки). */
+function dedupePolylinePoints(pts: { x: number; y: number }[]): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  for (const p of pts) {
+    const prev = out[out.length - 1];
+    if (!prev || Math.hypot(p.x - prev.x, p.y - prev.y) > 0.5) {
+      out.push(p);
+    }
+  }
+  return out.length > 0 ? out : pts;
+}
+
+/**
+ * Позиция текста кардинальности у конца сегмента: смещение по нормали к ребру,
+ * на сторону «наружу» от центра узла (чтобы не висело в середине длинного сегмента).
+ */
+function erCardinalityLabelPos(
+  nodeCenter: { x: number; y: number },
+  anchor: { x: number; y: number },
+  segDx: number,
+  segDy: number,
+  offset: number,
+): { x: number; y: number } {
+  const len = Math.hypot(segDx, segDy);
+  if (len < 1e-6) return { x: anchor.x, y: anchor.y };
+  let nx = -segDy / len;
+  let ny = segDx / len;
+  const ox = anchor.x - nodeCenter.x;
+  const oy = anchor.y - nodeCenter.y;
+  if (nx * ox + ny * oy < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  return { x: anchor.x + nx * offset, y: anchor.y + ny * offset };
 }
 
 export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
@@ -536,8 +659,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     const isSequenceFull =
       model.metadata.diagramType === 'sequence' && Boolean(model.sequenceData);
 
+    // Всегда снимаем слой sequence: при смене типа диаграммы иначе он остаётся под flowchart/class.
+    rootG.select('g.sequence-layer').remove();
     if (isSequenceFull) {
-      rootG.select('g.sequence-layer').remove();
       const seqG = rootG.insert('g', 'g.edges').attr('class', 'sequence-layer');
       const seqH = renderSequenceDiagram(seqG, model.sequenceData!, {
         width,
@@ -566,14 +690,15 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         Number.isFinite(n.y);
       const fb = fallbackLayout[n.id];
       const isClass = n.shape === 'class_box' && n.classBox;
+      const isErNode = n.shape === 'er_box' && n.erEntity;
       const w =
-        isClass && typeof n.width === 'number' && n.width > 0
+        (isClass || isErNode) && typeof n.width === 'number' && n.width > 0
           ? n.width
           : typeof n.width === 'number' && n.width > 0
             ? n.width
             : NODE_WIDTH;
       const h =
-        isClass && typeof n.height === 'number' && n.height > 0
+        (isClass || isErNode) && typeof n.height === 'number' && n.height > 0
           ? n.height
           : nodeHeightForLabel(n.label ?? n.id, n.height);
       return {
@@ -586,6 +711,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         width: w,
         height: h,
         classBox: n.classBox,
+        erEntity: n.erEntity,
       };
         });
 
@@ -794,6 +920,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         classRelation: e.classRelation,
         fromMultiplicity: e.fromMultiplicity,
         toMultiplicity: e.toMultiplicity,
+        erLeftCard: e.erLeftCard,
+        erRightCard: e.erRightCard,
       };
         });
 
@@ -832,6 +960,27 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .attr('dominant-baseline', 'central')
       .style('font-size', '12px')
       .style('fill', '#374151');
+
+    edgeEnter
+      .append('text')
+      .attr('class', 'er-edge-l')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .attr('opacity', 0)
+      .style('font-size', '11px')
+      .style('font-weight', '600')
+      .style('fill', '#475569')
+      .style('pointer-events', 'none');
+    edgeEnter
+      .append('text')
+      .attr('class', 'er-edge-r')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .attr('opacity', 0)
+      .style('font-size', '11px')
+      .style('font-weight', '600')
+      .style('fill', '#475569')
+      .style('pointer-events', 'none');
 
     const edgeMerge = edgeEnter.merge(edgeSelection);
     edgeMerge.each(function ensureEdgePaths(this: SVGGElement) {
@@ -883,6 +1032,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
     const refreshAllEdgeGraphics = (): void => {
       const seq = model.metadata.diagramType === 'sequence';
+      const er = model.metadata.diagramType === 'er';
       edgeMerge.each(function (this: SVGGElement, d: PositionedEdge, i: number) {
         const from = nodeById.get(d.from);
         const to = nodeById.get(d.to);
@@ -893,6 +1043,11 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           g.select<SVGPathElement>('path.edge-line').attr('d', pathD ?? '');
           g.select<SVGPathElement>('path.edge-hit').attr('d', pathD ?? '');
         };
+
+        if (!er) {
+          g.select<SVGTextElement>('text.er-edge-l').attr('opacity', 0);
+          g.select<SVGTextElement>('text.er-edge-r').attr('opacity', 0);
+        }
 
         if (seq) {
           const { x1, y1, x2, y2 } = computeEdgeEndpointsBetweenNodes(
@@ -911,6 +1066,91 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           g.select<SVGTextElement>('text.edge-label')
             .attr('x', (x1 + x2) / 2)
             .attr('y', 130 + i * 48 - 10);
+          return;
+        }
+
+        if (er) {
+          const useSavedRoute =
+            edgeDragDrawRef.current === 'orthogonal' &&
+            d.routePoints &&
+            d.routePoints.length >= 2;
+          let pts: { x: number; y: number }[];
+          if (useSavedRoute) {
+            pts = dedupePolylinePoints(
+              d.routePoints!.map((p) => ({ x: p.x, y: p.y })),
+            );
+          } else {
+            const { x1, y1, x2, y2 } = computeEdgeEndpointsBetweenNodes(
+              toGeom(from),
+              toGeom(to),
+              d.type,
+            );
+            pts = [
+              { x: x1, y: y1 },
+              { x: x2, y: y2 },
+            ];
+          }
+          setD(pts);
+
+          const CARD_OFF = 13;
+          const mid = pts[Math.floor(pts.length / 2)] ?? pts[0]!;
+          let labelX = mid.x;
+          let labelY = mid.y - 8;
+          if (pts.length >= 2) {
+            const si = Math.max(0, Math.floor((pts.length - 2) / 2));
+            const pa = pts[si]!;
+            const pb = pts[si + 1]!;
+            labelX = (pa.x + pb.x) / 2;
+            labelY = (pa.y + pb.y) / 2;
+            const sdx = pb.x - pa.x;
+            const sdy = pb.y - pa.y;
+            const slen = Math.hypot(sdx, sdy) || 1;
+            labelX += (-sdy / slen) * 12;
+            labelY += (sdx / slen) * 12;
+          }
+          g.select<SVGTextElement>('text.edge-label')
+            .attr('x', labelX)
+            .attr('y', labelY)
+            .text(d.label ?? '');
+
+          g.select<SVGTextElement>('text.er-edge-l').attr('opacity', 0);
+          g.select<SVGTextElement>('text.er-edge-r').attr('opacity', 0);
+          if (pts.length >= 2) {
+            const p0 = pts[0]!;
+            const p1 = pts[1]!;
+            if (d.erLeftCard) {
+              const pos = erCardinalityLabelPos(
+                { x: from.x, y: from.y },
+                p0,
+                p1.x - p0.x,
+                p1.y - p0.y,
+                CARD_OFF,
+              );
+              g.select<SVGTextElement>('text.er-edge-l')
+                .attr('opacity', 1)
+                .attr('x', pos.x)
+                .attr('y', pos.y)
+                .style('font-family', 'ui-monospace, Consolas, monospace')
+                .text(d.erLeftCard);
+            }
+            const pn = pts[pts.length - 1]!;
+            const pm = pts[pts.length - 2]!;
+            if (d.erRightCard) {
+              const pos = erCardinalityLabelPos(
+                { x: to.x, y: to.y },
+                pn,
+                pn.x - pm.x,
+                pn.y - pm.y,
+                CARD_OFF,
+              );
+              g.select<SVGTextElement>('text.er-edge-r')
+                .attr('opacity', 1)
+                .attr('x', pos.x)
+                .attr('y', pos.y)
+                .style('font-family', 'ui-monospace, Consolas, monospace')
+                .text(d.erRightCard);
+            }
+          }
           return;
         }
 
@@ -949,8 +1189,12 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
     edgeMerge
       .select<SVGPathElement>('path.edge-line')
-      .attr('marker-end', (d) => umlClassEdgePresentation(d).markerEnd)
-      .attr('marker-start', (d) => umlClassEdgePresentation(d).markerStart)
+      .attr('marker-end', (d) =>
+        model.metadata.diagramType === 'er' ? null : umlClassEdgePresentation(d).markerEnd,
+      )
+      .attr('marker-start', (d) =>
+        model.metadata.diagramType === 'er' ? null : umlClassEdgePresentation(d).markerStart,
+      )
       .attr('stroke', (d) =>
         selectedEdgeIndex === d.edgeIndex
           ? '#4f46e5'
@@ -1055,6 +1299,11 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         return;
       }
 
+      if (d.shape === 'er_box' && d.erEntity) {
+        paintErBoxNode(g, d);
+        return;
+      }
+
       if (d.shape === 'diamond') {
         g.insert('polygon', 'text')
           .attr(
@@ -1110,7 +1359,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           .attr('ry', 6);
       }
 
-      if (d.shape !== 'class_box') {
+      if (d.shape !== 'class_box' && d.shape !== 'er_box') {
         setSvgTextMultiline(g.select<SVGTextElement>('text'), d.label);
       }
     });
@@ -1393,6 +1642,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           const hh = n.height;
           if (n.shape === 'class_box' && n.classBox) {
             paintClassBoxNode(g, n);
+            return;
+          }
+          if (n.shape === 'er_box' && n.erEntity) {
+            paintErBoxNode(g, n);
             return;
           }
           if (n.shape === 'diamond') {
