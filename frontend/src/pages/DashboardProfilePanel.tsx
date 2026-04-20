@@ -4,6 +4,7 @@ import axios from 'axios';
 import { changePassword, getCurrentUser } from '../services/userApi';
 import { setAuthUser } from '../store/authSlice';
 import { useAppDispatch, useAppSelector } from '../store';
+import { UserStats } from './UserStats';
 
 export const DashboardProfilePanel: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -68,6 +69,7 @@ export const DashboardProfilePanel: React.FC = () => {
           <span>{authUser ? new Date(authUser.created_at).toLocaleString() : '...'}</span>
         </div>
       </section>
+      <UserStats />
 
       <section style={cardStyle}>
         <h2 style={sectionTitleStyle}>Смена пароля</h2>

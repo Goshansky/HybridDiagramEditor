@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -87,3 +87,22 @@ class PasswordChangeRequest(BaseModel):
         if len(value.encode("utf-8")) > 72:
             raise ValueError("Пароль должен быть не длиннее 72 байт в UTF-8")
         return value
+
+
+class UserStatsRead(BaseModel):
+    totalDiagrams: int
+    totalVersions: int
+    lastActivityDate: datetime | None = None
+
+
+class VersionActivityItem(BaseModel):
+    bucket: str
+    count: int
+
+
+class VersionActivityRead(BaseModel):
+    period: Literal["day", "week", "month", "year"]
+    granularity: Literal["hour", "day"]
+    startDate: date
+    endDate: date
+    items: list[VersionActivityItem]

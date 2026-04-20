@@ -865,15 +865,15 @@ export const EditorPage: React.FC = () => {
             <span style={{ fontSize: 14, fontWeight: 500, color: '#374151' }}>Личный кабинет</span>
           </Link>
 
-          <a href="#" style={headerLinkStyle}>
+          <Link to="/dashboard" state={{ tab: 'docs' }} style={headerLinkStyle}>
             <BookOpen size={16} />
             <span>Документация</span>
-          </a>
+          </Link>
 
-          <a href="/versions" style={headerLinkStyle}>
+          <Link to="/dashboard" state={{ tab: 'projects' }} style={headerLinkStyle}>
             <GitBranch size={16} />
-            <span>Версии</span>
-          </a>
+            <span>Проекты</span>
+          </Link>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} />
