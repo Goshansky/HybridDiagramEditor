@@ -1,3 +1,4 @@
+import type { SequenceDiagramData } from './sequenceModel';
 import type {
   ClassDefStatementAst,
   ClassStatementAst,
@@ -123,6 +124,8 @@ export interface DiagramModel {
   subgraphParentById?: Record<string, string | null>;
   /** Заметки classDiagram. */
   classNotes?: ClassNoteModel[];
+  /** Полная модель sequenceDiagram (если задана — рендер по ней, не по edges). */
+  sequenceData?: SequenceDiagramData;
 }
 
 function collectNodeIdsFromBody(body: StatementAst[]): string[] {

@@ -7,6 +7,7 @@ import {
   trimPolylineEndForArrow,
   type PositionedNodeLike,
 } from './diagramCanvasGeometry';
+import { renderSequenceDiagram } from './diagramCanvasSequence';
 
 interface DiagramCanvasProps {
   model: DiagramModel | null;
@@ -526,12 +527,28 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     }
     panHitRect.attr('x', -2000).attr('y', -2000).attr('width', 4000).attr('height', 4000);
 
+    const isSequenceFull =
+      model.metadata.diagramType === 'sequence' && Boolean(model.sequenceData);
+
+    if (isSequenceFull) {
+      rootG.select('g.sequence-layer').remove();
+      const seqG = rootG.insert('g', 'g.edges').attr('class', 'sequence-layer');
+      const seqH = renderSequenceDiagram(seqG, model.sequenceData!, {
+        width,
+        baseHeight: height,
+        autonumber: model.sequenceData!.autonumber,
+      });
+      svgSelection.attr('height', Math.max(height, seqH));
+    }
+
     const fallbackLayout = computeLayout(model, width, height);
 
     /** Позиция узла в начале drag — чтобы не слать onNodePositionChange при клике без перемещения. */
     const nodeDragStartById = new Map<string, { x: number; y: number }>();
 
-    const positionedNodes: PositionedNode[] = model.nodes.map((n) => {
+    const positionedNodes: PositionedNode[] = isSequenceFull
+      ? []
+      : model.nodes.map((n) => {
       const hasXY =
         typeof n.x === 'number' &&
         typeof n.y === 'number' &&
@@ -560,7 +577,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         height: h,
         classBox: n.classBox,
       };
-    });
+        });
 
     const nodeById = new Map<string, PositionedNode>(
       positionedNodes.map((n) => [n.id, n]),
@@ -732,7 +749,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       rootG.select('g.class-notes').remove();
     }
 
-    const positionedEdges: PositionedEdge[] = model.edges.map((e, edgeIndex) => {
+    /** При полном sequence рёбра рисует diagramCanvasSequence; иначе model.edges + пустые узлы дают (0,0) и кучу текста в углу. */
+    const positionedEdges: PositionedEdge[] = isSequenceFull
+      ? []
+      : model.edges.map((e, edgeIndex) => {
       const from = nodeById.get(e.from);
       const to = nodeById.get(e.to);
       const fromX = from?.x ?? 0;
@@ -765,7 +785,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         fromMultiplicity: e.fromMultiplicity,
         toMultiplicity: e.toMultiplicity,
       };
-    });
+        });
 
     // --- edges data join ---
     const edgeSelection = edgesG
@@ -940,8 +960,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
     edgeSelection.exit().remove();
 
-    // Sequence diagram rendering (MVP): lifelines + vertical stacking of messages.
-    if (model.metadata.diagramType === 'sequence') {
+    // Sequence (старый режим без sequenceData): lifelines + рёбра как горизонтальные линии.
+    if (model.metadata.diagramType === 'sequence' && !model.sequenceData) {
       let lifelinesG = rootG.select<SVGGElement>('g.lifelines');
       if (lifelinesG.empty()) {
         lifelinesG = rootG.insert('g', 'g.edges').attr('class', 'lifelines');

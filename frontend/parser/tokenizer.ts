@@ -18,7 +18,9 @@ export type TokenType =
   | 'TRIPLE_COLON' // :::className
   | 'COMMENT'
   | 'NEWLINE'
-  | 'EOF';
+  | 'EOF'
+  /** Ключевые слова sequenceDiagram (participant, alt, loop, …). */
+  | 'SEQ_KW';
 
 export interface BaseToken {
   type: TokenType;
@@ -31,6 +33,32 @@ export interface BaseToken {
 }
 
 export type Token = BaseToken;
+
+/** Распознаётся как SEQ_KW в readIdentifierLike (подсветка / будущий AST). */
+export const SEQUENCE_DIAGRAM_KEYWORDS = new Set([
+  'sequencediagram',
+  'participant',
+  'actor',
+  'as',
+  'activate',
+  'deactivate',
+  'alt',
+  'else',
+  'opt',
+  'loop',
+  'par',
+  'and',
+  'critical',
+  'option',
+  'break',
+  'note',
+  'over',
+  'left',
+  'right',
+  'of',
+  'autonumber',
+  'end',
+]);
 
 function makePosition(line: number, column: number): Position {
   return { line, column };
@@ -454,6 +482,9 @@ export class Lexer {
       // Mermaid: TD/TB — сверху вниз; регистр и TB как у Live Editor
       type = 'DIRECTION';
       value = (lower === 'tb' || lower === 'td' ? 'TD' : lower.toUpperCase()) as Direction;
+    } else if (SEQUENCE_DIAGRAM_KEYWORDS.has(lower)) {
+      type = 'SEQ_KW';
+      value = lower;
     }
 
     return {

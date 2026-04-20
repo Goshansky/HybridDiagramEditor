@@ -13,6 +13,16 @@ import { parseErDiagram } from './erDiagram';
 export type DiagramType = 'flowchart' | 'class' | 'sequence' | 'er';
 
 export type {
+  SequenceDiagramData,
+  SequenceParticipant,
+  SequenceMessage,
+  SequenceNote,
+  SequenceStatement,
+  SequenceArrowKind,
+} from './sequenceModel';
+export { SEQUENCE_DIAGRAM_KEYWORDS } from './tokenizer';
+
+export type {
   ClassBoxModel,
   ClassFieldModel,
   ClassMethodModel,
