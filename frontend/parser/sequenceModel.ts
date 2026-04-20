@@ -77,4 +77,25 @@ export interface SequenceDiagramData {
   autonumber: boolean;
   /** style NodeId fill:...,stroke:... */
   participantStyles: Record<string, Record<string, string>>;
+  /** Порядок колонок (id слева направо), из `%%`-хинта или после drag на холсте. */
+  participantOrder?: string[];
+}
+
+/** Стабильный порядок id участников: `participantOrder` + хвост из `participants`. */
+export function getOrderedParticipantIds(data: SequenceDiagramData): string[] {
+  const allIds = data.participants.map((p) => p.id);
+  const po = data.participantOrder;
+  if (!po?.length) return allIds;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of po) {
+    if (allIds.includes(id) && !seen.has(id)) {
+      out.push(id);
+      seen.add(id);
+    }
+  }
+  for (const id of allIds) {
+    if (!seen.has(id)) out.push(id);
+  }
+  return out;
 }

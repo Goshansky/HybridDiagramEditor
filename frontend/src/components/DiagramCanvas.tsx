@@ -35,6 +35,8 @@ interface DiagramCanvasProps {
   /** Перетащить конец связи на другой узел (flowchart). */
   onReconnectEdge?: (edgeIndex: number, newTo: string) => void;
   gridSnap?: boolean;
+  /** sequenceDiagram: сохранить порядок колонок участников (в `%%`-хинте). */
+  onSequenceParticipantReorder?: (orderedIds: string[]) => void;
 }
 
 type NodeShape =
@@ -345,6 +347,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   onCreateEdge,
   onReconnectEdge,
   gridSnap = true,
+  onSequenceParticipantReorder,
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const rootGroupRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
@@ -352,6 +355,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   const zoomInitializedRef = useRef(false);
   /** Не даём zoom перехватывать жесты во время drag узла (без снятия/повторного svg.call(zoom) — иначе сбрасывается transform). */
   const isNodeDraggingRef = useRef(false);
+  const isSequenceParticipantDraggingRef = useRef(false);
   const isNodeResizingRef = useRef(false);
   const isConnectionDraggingRef = useRef(false);
   const isEdgeReconnectingRef = useRef(false);
@@ -377,6 +381,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .scaleExtent([0.3, 4])
       .filter((event) => {
         if (isNodeDraggingRef.current) return false;
+        if (isSequenceParticipantDraggingRef.current) return false;
         if (isEdgeReconnectingRef.current) return false;
         if (event.type === 'wheel') return true;
         if (event.type === 'mousedown') {
@@ -386,6 +391,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           if (t?.closest?.('g.node')) return false;
           if (t?.closest?.('g.edge')) return false;
           if (t?.closest?.('g.lifelines')) return false;
+          if (t?.closest?.('g.sequence-participant')) return false;
           return true;
         }
         return event.type !== 'dblclick';
@@ -537,6 +543,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         width,
         baseHeight: height,
         autonumber: model.sequenceData!.autonumber,
+        onParticipantReorder: onSequenceParticipantReorder,
+        onParticipantDragActive: (active) => {
+          isSequenceParticipantDraggingRef.current = active;
+        },
       });
       svgSelection.attr('height', Math.max(height, seqH));
     }
@@ -1641,6 +1651,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     onEdgeDoubleClick,
     onCreateEdge,
     onReconnectEdge,
+    onSequenceParticipantReorder,
   ]);
 
   return (

@@ -25,6 +25,7 @@ import {
   sourceHasLayoutPositionHints,
   stripLayoutHintsFromSource,
   upsertLayoutHint,
+  upsertSequenceParticipantOrder,
 } from '../../parser';
 import { AddEdgeDialog } from '../components/AddEdgeDialog';
 import { AddNodeDialog, type FlowNodeShape } from '../components/AddNodeDialog';
@@ -1071,6 +1072,14 @@ export const EditorPage: React.FC = () => {
                   });
                   setStatusMessage(`Обновлен layout-хинт для узла "${id}"`);
                 }}
+                onSequenceParticipantReorder={
+                  currentDiagramType === 'sequence'
+                    ? (orderedIds) => {
+                        setSource((prev) => upsertSequenceParticipantOrder(prev, orderedIds));
+                        setStatusMessage('Порядок участников сохранён в %%-хинте');
+                      }
+                    : undefined
+                }
               />
             ) : (
               <div

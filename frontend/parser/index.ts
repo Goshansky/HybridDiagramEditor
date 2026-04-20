@@ -20,6 +20,7 @@ export type {
   SequenceStatement,
   SequenceArrowKind,
 } from './sequenceModel';
+export { getOrderedParticipantIds } from './sequenceModel';
 export { SEQUENCE_DIAGRAM_KEYWORDS } from './tokenizer';
 
 export type {
@@ -45,6 +46,7 @@ export {
   upsertLayoutSize,
   getLayoutHintDocument,
   upsertEdgeStyleInHint,
+  upsertSequenceParticipantOrder,
   type LayoutDocument,
 } from './layoutHintSync';
 export { generateMermaidFromModel, buildHintDocumentFromModel } from './generateMermaid';

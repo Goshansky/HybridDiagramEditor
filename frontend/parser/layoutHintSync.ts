@@ -8,6 +8,8 @@ interface LayoutPoint {
 export interface LayoutDocument {
   layout?: Record<string, LayoutPoint>;
   edgeStyles?: Record<string, Record<string, unknown>>;
+  /** Порядок колонок sequenceDiagram (id участников слева направо). */
+  sequenceParticipantOrder?: string[];
   [key: string]: unknown;
 }
 
@@ -137,6 +139,21 @@ export function getLayoutHintDocument(source: string): LayoutDocument | null {
   const lines = source.split(/\r?\n/);
   const block = extractHintBlock(lines);
   return block?.json ?? null;
+}
+
+/** Сохранить порядок участников sequenceDiagram в JSON-хинте `%% { ... }`. */
+export function upsertSequenceParticipantOrder(source: string, orderedIds: string[]): string {
+  const lines = source.split(/\r?\n/);
+  const block = extractHintBlock(lines);
+  if (block) {
+    const nextJson: LayoutDocument = { ...block.json };
+    nextJson.sequenceParticipantOrder = orderedIds;
+    const replacement = `%% ${JSON.stringify(nextJson)}`;
+    return [...lines.slice(0, block.startLine), replacement, ...lines.slice(block.endLine + 1)].join('\n');
+  }
+  const nextJson: LayoutDocument = { sequenceParticipantOrder: orderedIds };
+  const hintLine = `%% ${JSON.stringify(nextJson)}`;
+  return source.trimEnd() ? `${source.trimEnd()}\n${hintLine}` : hintLine;
 }
 
 /** Стили ребра по индексу в `model.edges` — хранятся в JSON-хинте рядом с layout. */

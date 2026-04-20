@@ -3,16 +3,18 @@
  * Не использует общий Lexer — см. tokenizer SEQ_KW для подсветки/ключевых слов.
  */
 import type { DiagramModel } from './model';
-import type {
-  SequenceAltBranch,
-  SequenceArrowKind,
-  SequenceCriticalBranch,
-  SequenceDiagramData,
-  SequenceMessage,
-  SequenceNote,
-  SequenceParBranch,
-  SequenceParticipant,
-  SequenceStatement,
+import { getLayoutHintDocument } from './layoutHintSync';
+import {
+  getOrderedParticipantIds,
+  type SequenceAltBranch,
+  type SequenceArrowKind,
+  type SequenceCriticalBranch,
+  type SequenceDiagramData,
+  type SequenceMessage,
+  type SequenceNote,
+  type SequenceParBranch,
+  type SequenceParticipant,
+  type SequenceStatement,
 } from './sequenceModel';
 
 let idSeq = 0;
@@ -427,11 +429,25 @@ export function parseSequenceDiagramData(source: string): SequenceDiagramData {
     }
   }
 
+  const hint = getLayoutHintDocument(source);
+  const rawOrder = hint?.sequenceParticipantOrder;
+  let participantOrder: string[] | undefined;
+  if (Array.isArray(rawOrder) && rawOrder.every((x) => typeof x === 'string')) {
+    participantOrder = getOrderedParticipantIds({
+      participants,
+      statements,
+      autonumber,
+      participantStyles,
+      participantOrder: rawOrder,
+    });
+  }
+
   return {
     participants,
     statements,
     autonumber,
     participantStyles,
+    ...(participantOrder ? { participantOrder } : {}),
   };
 }
 
@@ -439,14 +455,18 @@ export function sequenceDataToDiagramModel(data: SequenceDiagramData): DiagramMo
   const spacing = 200;
   const startX = 120;
   const topY = 56;
-  const nodes = data.participants.map((p, idx) => ({
-    id: p.id,
-    label: p.label,
-    shape: 'rect' as const,
-    styles: data.participantStyles[p.id] ?? {},
-    x: startX + idx * spacing,
-    y: topY,
-  }));
+  const orderedIds = getOrderedParticipantIds(data);
+  const nodes = orderedIds.map((id, idx) => {
+    const p = data.participants.find((q) => q.id === id)!;
+    return {
+      id: p.id,
+      label: p.label,
+      shape: 'rect' as const,
+      styles: data.participantStyles[p.id] ?? {},
+      x: startX + idx * spacing,
+      y: topY,
+    };
+  });
 
   const edges: DiagramModel['edges'] = [];
   let ei = 0;

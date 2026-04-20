@@ -2,11 +2,12 @@
  * Рендер sequenceDiagram в SVG (g.sequence-layer).
  */
 import * as d3 from 'd3';
-import type {
-  SequenceDiagramData,
-  SequenceMessage,
-  SequenceNote,
-  SequenceStatement,
+import {
+  getOrderedParticipantIds,
+  type SequenceDiagramData,
+  type SequenceMessage,
+  type SequenceNote,
+  type SequenceStatement,
 } from '../../parser/sequenceModel';
 
 const COL_W = 200;
@@ -134,6 +135,8 @@ function resolveCenterX(
   return LEFT_MARGIN + COL_W / 2;
 }
 
+type ParticipantDragDatum = { id: string; index: number };
+
 export function renderSequenceDiagram(
   seqG: d3.Selection<SVGGElement, unknown, null, undefined>,
   data: SequenceDiagramData,
@@ -141,6 +144,8 @@ export function renderSequenceDiagram(
     width: number;
     baseHeight: number;
     autonumber: boolean;
+    onParticipantReorder?: (orderedIds: string[]) => void;
+    onParticipantDragActive?: (active: boolean) => void;
   },
 ): number {
   seqG.selectAll('*').remove();
@@ -148,15 +153,15 @@ export function renderSequenceDiagram(
   const flat: FlatItem[] = [];
   flattenStatements(data.statements, 0, flat);
 
-  const participantIds = data.participants.map((p) => p.id);
+  const orderedIds = getOrderedParticipantIds(data);
   const cx = new Map<string, number>();
-  participantIds.forEach((id, i) => {
+  orderedIds.forEach((id, i) => {
     cx.set(id, LEFT_MARGIN + i * COL_W + COL_W / 2);
   });
 
   const contentW = Math.max(
     options.width,
-    LEFT_MARGIN * 2 + Math.max(participantIds.length, 1) * COL_W,
+    LEFT_MARGIN * 2 + Math.max(orderedIds.length, 1) * COL_W,
   );
 
   let y = TOP_MARGIN + HEADER_H + 16;
@@ -260,19 +265,26 @@ export function renderSequenceDiagram(
       .attr('stroke-width', 1.2);
   }
 
-  const hdrBottom = TOP_MARGIN + HEADER_H;
-  participantIds.forEach((id, i) => {
-    const x = LEFT_MARGIN + i * COL_W;
+  const lineY2Local = totalH - 16 - TOP_MARGIN;
+  orderedIds.forEach((id, i) => {
+    const xBase = LEFT_MARGIN + i * COL_W;
     const p = data.participants.find((q) => q.id === id)!;
     const styles = data.participantStyles[id] ?? {};
     const fill = styles.fill ?? '#ffffff';
     const stroke = styles.stroke ?? '#94a3b8';
     const sw = styles['stroke-width'] ? String(styles['stroke-width']) : '1.5px';
 
-    seqG
-      .append('rect')
-      .attr('x', x)
-      .attr('y', TOP_MARGIN)
+    const pg = seqG
+      .append('g')
+      .attr('class', 'sequence-participant')
+      .attr('data-participant-id', id)
+      .datum({ id, index: i } satisfies ParticipantDragDatum)
+      .attr('transform', `translate(${xBase}, ${TOP_MARGIN})`)
+      .style('cursor', options.onParticipantReorder ? 'grab' : 'default');
+
+    pg.append('rect')
+      .attr('x', 0)
+      .attr('y', 0)
       .attr('width', COL_W - 8)
       .attr('height', HEADER_H - 4)
       .attr('rx', 4)
@@ -280,26 +292,64 @@ export function renderSequenceDiagram(
       .attr('stroke', stroke)
       .attr('stroke-width', sw);
 
-    seqG
-      .append('text')
-      .attr('x', x + (COL_W - 8) / 2)
-      .attr('y', TOP_MARGIN + HEADER_H / 2)
+    pg.append('text')
+      .attr('x', (COL_W - 8) / 2)
+      .attr('y', HEADER_H / 2)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
       .style('font-size', '12px')
       .style('font-weight', '600')
       .style('fill', '#0f172a')
+      .style('pointer-events', 'none')
       .text(p.label.length > 22 ? `${p.label.slice(0, 22)}…` : p.label);
 
-    seqG
-      .append('line')
-      .attr('x1', x + (COL_W - 8) / 2)
-      .attr('x2', x + (COL_W - 8) / 2)
-      .attr('y1', hdrBottom)
-      .attr('y2', totalH - 16)
+    pg.append('line')
+      .attr('x1', (COL_W - 8) / 2)
+      .attr('x2', (COL_W - 8) / 2)
+      .attr('y1', HEADER_H)
+      .attr('y2', lineY2Local)
       .attr('stroke', '#64748b')
       .attr('stroke-width', 1.2)
-      .attr('stroke-dasharray', '5 4');
+      .attr('stroke-dasharray', '5 4')
+      .style('pointer-events', 'none');
+
+    if (options.onParticipantReorder) {
+      const dragAcc = { dx: 0 };
+      const reorder = options.onParticipantReorder;
+      const onDrag = options.onParticipantDragActive;
+      pg.call(
+        d3
+          .drag<SVGGElement, ParticipantDragDatum>()
+          .on('start', function () {
+            dragAcc.dx = 0;
+            onDrag?.(true);
+            d3.select(this).style('cursor', 'grabbing').raise();
+          })
+          .on('drag', function (event, d) {
+            dragAcc.dx += event.dx;
+            d3.select(this).attr(
+              'transform',
+              `translate(${xBase + dragAcc.dx}, ${TOP_MARGIN})`,
+            );
+          })
+          .on('end', function (event, d) {
+            d3.select(this).style('cursor', 'grab');
+            onDrag?.(false);
+            const centerAbs =
+              xBase + (COL_W - 8) / 2 + dragAcc.dx;
+            let newIdx = Math.round(
+              (centerAbs - LEFT_MARGIN - (COL_W - 8) / 2) / COL_W,
+            );
+            newIdx = Math.max(0, Math.min(orderedIds.length - 1, newIdx));
+            const next = [...orderedIds];
+            const [item] = next.splice(d.index, 1);
+            next.splice(newIdx, 0, item);
+            d3.select(this).attr('transform', `translate(${xBase}, ${TOP_MARGIN})`);
+            const changed = next.some((pid, idx) => pid !== orderedIds[idx]);
+            if (changed) reorder(next);
+          }),
+      );
+    }
   });
 
   /** LIFO стек открытых Y по участнику (активации). */
