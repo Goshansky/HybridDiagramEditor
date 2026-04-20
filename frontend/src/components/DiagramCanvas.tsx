@@ -758,6 +758,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         event.sourceEvent?.stopPropagation();
         isNodeDraggingRef.current = true;
         edgeDragDrawRef.current = 'straight';
+        d3.select(svg).style('cursor', 'grabbing');
         d3.select<SVGGElement, PositionedNode>(this)
           .select<
             SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
@@ -767,12 +768,20 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       })
       .on('drag', function (event, d) {
         const k = d3.zoomTransform(svg).k || 1;
-        d.x += event.dx / k;
-        d.y += event.dy / k;
-        if (gridSnap) {
-          d.x = Math.round(d.x / 20) * 20;
-          d.y = Math.round(d.y / 20) * 20;
-        }
+        const sourceEvt = event.sourceEvent as MouseEvent | PointerEvent | undefined;
+        const stepX =
+          Number.isFinite(event.dx) && event.dx !== 0
+            ? event.dx
+            : (sourceEvt?.movementX ?? 0);
+        const stepY =
+          Number.isFinite(event.dy) && event.dy !== 0
+            ? event.dy
+            : (sourceEvt?.movementY ?? 0);
+
+        d.x += stepX / k;
+        d.y += stepY / k;
+
+        // Во время drag двигаемся плавно; snap к сетке применяем только на dragend.
         d3.select<SVGGElement, PositionedNode>(this).attr(
           'transform',
           `translate(${d.x},${d.y})`,
@@ -782,6 +791,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .on('end', function (event, d) {
         isNodeDraggingRef.current = false;
         edgeDragDrawRef.current = 'orthogonal';
+        d3.select(svg).style('cursor', null);
         if (gridSnap) {
           d.x = Math.round(d.x / 20) * 20;
           d.y = Math.round(d.y / 20) * 20;

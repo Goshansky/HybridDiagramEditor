@@ -1024,7 +1024,7 @@ export const EditorPage: React.FC = () => {
             style={{
               flex: 1,
               minHeight: 0,
-              overflow: 'auto',
+              overflow: 'hidden',
             }}
           >
             {diagramModel ? (
