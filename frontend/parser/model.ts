@@ -155,6 +155,37 @@ export function buildDiagramModel(ast: DiagramAst): DiagramModel {
     }
   };
 
+  const pendingEdgeStyles = new Map<number, Record<string, string>>();
+
+  const normalizeEdgeStyleHint = (obj: Record<string, unknown>): Record<string, string> => {
+    const out: Record<string, string> = {};
+    if (typeof obj.stroke === 'string') out.stroke = obj.stroke;
+    if (typeof obj['stroke-width'] === 'string') out['stroke-width'] = obj['stroke-width'];
+    if (typeof obj['stroke-width'] === 'number') out['stroke-width'] = `${obj['stroke-width']}px`;
+    if (typeof obj['stroke-dasharray'] === 'string') out['stroke-dasharray'] = obj['stroke-dasharray'];
+    return out;
+  };
+
+  const mergeEdgeStylesAtIndex = (idx: number, merged: Record<string, string>): void => {
+    if (Object.keys(merged).length === 0) return;
+    if (edges[idx]) {
+      Object.assign(edges[idx].styles, merged);
+      return;
+    }
+    const prev = pendingEdgeStyles.get(idx) ?? {};
+    pendingEdgeStyles.set(idx, { ...prev, ...merged });
+  };
+
+  const applyEdgeStylesFromHint = (hint: LayoutHintAst): void => {
+    if (!hint.edgeStyles) return;
+    for (const [k, v] of Object.entries(hint.edgeStyles)) {
+      const idx = Number(k);
+      if (!Number.isFinite(idx) || idx < 0) continue;
+      const merged = normalizeEdgeStyleHint(v as Record<string, unknown>);
+      mergeEdgeStylesAtIndex(idx, merged);
+    }
+  };
+
   const registerSubgraphBlock = (block: SubgraphBlockAst): void => {
     if (block.id) {
       const nodeIds = collectNodeIdsFromBody(block.body);
@@ -188,7 +219,9 @@ export function buildDiagramModel(ast: DiagramAst): DiagramModel {
       } else if (stmt.type === 'StyleStatement') {
         applyStyle(stmt as StyleStatementAst);
       } else if (stmt.type === 'LayoutHint') {
-        applyLayout(stmt as LayoutHintAst);
+        const h = stmt as LayoutHintAst;
+        applyLayout(h);
+        applyEdgeStylesFromHint(h);
       } else if (stmt.type === 'SubgraphBlock') {
         registerSubgraphBlock(stmt);
       }
@@ -196,6 +229,12 @@ export function buildDiagramModel(ast: DiagramAst): DiagramModel {
   }
 
   processStatements(ast.statements);
+
+  for (const [idx, styles] of pendingEdgeStyles.entries()) {
+    if (edges[idx]) {
+      Object.assign(edges[idx].styles, styles);
+    }
+  }
 
   const subgraphs =
     subgraphById.size > 0 ? Array.from(subgraphById.values()) : undefined;

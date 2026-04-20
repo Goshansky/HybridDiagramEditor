@@ -30,6 +30,9 @@ interface DiagramCanvasProps {
   disableNodeDrag?: boolean;
   onNodeDoubleClick?: (id: string) => void;
   onEdgeDoubleClick?: (edge: { from: string; to: string; label?: string; type: 'arrow' | 'line' }) => void;
+  onCreateEdge?: (from: string, to: string) => void;
+  /** Перетащить конец связи на другой узел (flowchart). */
+  onReconnectEdge?: (edgeIndex: number, newTo: string) => void;
   gridSnap?: boolean;
 }
 
@@ -70,6 +73,8 @@ interface PositionedEdge {
 const NODE_WIDTH = 110;
 const NODE_HEIGHT = 46;
 const NODE_LINE_HEIGHT_PX = 16;
+const NODE_MIN_WIDTH = 44;
+const NODE_MIN_HEIGHT = 32;
 
 function nodeHeightForLabel(label: string, explicitHeight?: number): number {
   if (typeof explicitHeight === 'number' && explicitHeight > 0) {
@@ -166,6 +171,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   disableNodeDrag = false,
   onNodeDoubleClick,
   onEdgeDoubleClick,
+  onCreateEdge,
+  onReconnectEdge,
   gridSnap = true,
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -174,6 +181,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   const zoomInitializedRef = useRef(false);
   /** Не даём zoom перехватывать жесты во время drag узла (без снятия/повторного svg.call(zoom) — иначе сбрасывается transform). */
   const isNodeDraggingRef = useRef(false);
+  const isNodeResizingRef = useRef(false);
+  const isConnectionDraggingRef = useRef(false);
+  const isEdgeReconnectingRef = useRef(false);
+  const reconnectSuppressClickRef = useRef(false);
   /** Во время drag — прямые рёбра; после end — снова по `routePoints` из модели. */
   const edgeDragDrawRef = useRef<'orthogonal' | 'straight'>('orthogonal');
 
@@ -195,6 +206,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .scaleExtent([0.3, 4])
       .filter((event) => {
         if (isNodeDraggingRef.current) return false;
+        if (isEdgeReconnectingRef.current) return false;
         if (event.type === 'wheel') return true;
         if (event.type === 'mousedown') {
           const mouseEvent = event as MouseEvent;
@@ -241,6 +253,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg || !model) return;
+
+    let reconnectMoveHandler: ((event: MouseEvent) => void) | null = null;
+    let reconnectUpHandler: ((event: Event) => void) | null = null;
+    const reconnectDragCapture = true;
 
     const svgSelection = d3.select<SVGSVGElement, unknown>(svg);
     svgSelection.attr('width', width).attr('height', height);
@@ -294,6 +310,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     if (nodesG.empty()) {
       nodesG = rootG.append('g').attr('class', 'nodes');
     }
+    let overlaysG = rootG.select<SVGGElement>('g.overlays');
+    if (overlaysG.empty()) {
+      overlaysG = rootG.append('g').attr('class', 'overlays');
+    }
 
     let gridRect = rootG.select<SVGRectElement>('rect.canvas-grid');
     if (gridRect.empty()) {
@@ -343,6 +363,38 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     const nodeById = new Map<string, PositionedNode>(
       positionedNodes.map((n) => [n.id, n]),
     );
+
+    const getCanvasPointFromClient = (clientX: number, clientY: number): { x: number; y: number } => {
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return { x: 0, y: 0 };
+      const pt = svg.createSVGPoint();
+      pt.x = clientX;
+      pt.y = clientY;
+      const inSvg = pt.matrixTransform(ctm.inverse());
+      const zt = d3.zoomTransform(svg);
+      const [x, y] = zt.invert([inSvg.x, inSvg.y]);
+      return { x, y };
+    };
+
+    const resolveTargetNodeId = (event: MouseEvent, sourceId: string): string | null => {
+      const stack = document.elementsFromPoint(event.clientX, event.clientY);
+      for (const el of stack) {
+        const nodeEl = el.closest?.('g.node') as SVGGElement | null;
+        const nid = nodeEl?.getAttribute('data-node-id');
+        if (nid && nid !== sourceId) return nid;
+      }
+      const p = getCanvasPointFromClient(event.clientX, event.clientY);
+      const hit = positionedNodes.find((n) => {
+        if (n.id === sourceId) return false;
+        return (
+          p.x >= n.x - n.width / 2 &&
+          p.x <= n.x + n.width / 2 &&
+          p.y >= n.y - n.height / 2 &&
+          p.y <= n.y + n.height / 2
+        );
+      });
+      return hit?.id ?? null;
+    };
 
     interface SubgraphLayoutBox {
       id: string;
@@ -530,6 +582,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     });
     edgeMerge.on('click', (event, d) => {
       event.stopPropagation();
+      if (reconnectSuppressClickRef.current) {
+        reconnectSuppressClickRef.current = false;
+        return;
+      }
       onSelectEdge?.(d.edgeIndex);
     });
     edgeMerge.on('dblclick', (event, d) => {
@@ -628,7 +684,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           ? '#4f46e5'
           : (d.styles.stroke ?? '#4b5563'),
       )
-      .attr('stroke-width', (d) => (selectedEdgeIndex === d.edgeIndex ? 3 : 2))
+      .attr('stroke-width', (d) =>
+        edgeLineStrokeWidthPx(d.styles, selectedEdgeIndex === d.edgeIndex),
+      )
       .attr('stroke-dasharray', (d) => d.styles['stroke-dasharray'] ?? null);
 
     edgeMerge.select<SVGTextElement>('text.edge-label').text((d) => d.label ?? '');
@@ -675,7 +733,19 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .enter()
       .append('g')
       .attr('class', 'node')
+      .attr('data-node-id', (d) => d.id)
       .style('cursor', 'pointer');
+
+    nodeEnter
+      .append('circle')
+      .attr('class', 'connect-port')
+      .attr('r', 7)
+      .attr('fill', '#4f46e5')
+      .attr('stroke', '#ffffff')
+      .attr('stroke-width', 2)
+      .style('opacity', 0)
+      .style('pointer-events', 'none')
+      .style('cursor', 'crosshair');
 
     nodeEnter
       .append('text')
@@ -738,6 +808,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     });
 
     nodeMerge.attr('transform', (d) => `translate(${d.x},${d.y})`);
+    nodeMerge.attr('data-node-id', (d) => d.id);
 
     nodeMerge
       .select<
@@ -749,11 +820,90 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       )
       .attr('stroke-width', (d) => nodeStrokeWidthPx(d, selectedNodeId));
 
+    nodeMerge
+      .select<SVGCircleElement>('circle.connect-port')
+      .attr('cx', (d) => d.width / 2 + 2)
+      .attr('cy', 0)
+      .style('opacity', (d) => (d.id === selectedNodeId ? 1 : 0))
+      .style('pointer-events', (d) => (d.id === selectedNodeId ? 'all' : 'none'));
+
     nodeSelection.exit().remove();
+
+    const updateConnectPortVisibility = (): void => {
+      nodeMerge
+        .select<SVGCircleElement>('circle.connect-port')
+        .style('opacity', (d) => (d.id === selectedNodeId ? 1 : 0))
+        .style('pointer-events', (d) => (d.id === selectedNodeId ? 'all' : 'none'));
+    };
+
+    let connectionMoveHandler: ((event: MouseEvent) => void) | null = null;
+    let connectionUpHandler: ((event: Event) => void) | null = null;
+    const connectionDragCapture = true;
+
+    const removeConnectionDraftElements = (): void => {
+      overlaysG.selectAll('.edge-draft-line, .edge-reconnect-draft').remove();
+    };
+
+    const startConnectionDrag = (sourceNode: PositionedNode, event: MouseEvent): void => {
+      event.stopPropagation();
+      event.preventDefault();
+      isConnectionDraggingRef.current = true;
+      removeConnectionDraftElements();
+      const start = { x: sourceNode.x + sourceNode.width / 2, y: sourceNode.y };
+      const p = getCanvasPointFromClient(event.clientX, event.clientY);
+      const draft = overlaysG
+        .append('line')
+        .attr('class', 'edge-draft-line')
+        .attr('x1', start.x)
+        .attr('y1', start.y)
+        .attr('x2', p.x)
+        .attr('y2', p.y)
+        .attr('stroke', '#6366f1')
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '6 4')
+        .attr('pointer-events', 'none');
+
+      connectionMoveHandler = (moveEvent: MouseEvent) => {
+        const next = getCanvasPointFromClient(moveEvent.clientX, moveEvent.clientY);
+        draft.attr('x2', next.x).attr('y2', next.y);
+      };
+      let connectionDragFinished = false;
+      const finishConnectionDrag = (upEvent: Event): void => {
+        if (connectionDragFinished) return;
+        connectionDragFinished = true;
+        const me = upEvent as MouseEvent;
+        const targetId = resolveTargetNodeId(me, sourceNode.id);
+        if (targetId) {
+          onCreateEdge?.(sourceNode.id, targetId);
+        }
+        draft.remove();
+        if (connectionMoveHandler) {
+          window.removeEventListener('mousemove', connectionMoveHandler);
+        }
+        window.removeEventListener('mouseup', finishConnectionDrag, connectionDragCapture);
+        window.removeEventListener('pointerup', finishConnectionDrag, connectionDragCapture);
+        window.removeEventListener('pointercancel', finishConnectionDrag, connectionDragCapture);
+        connectionMoveHandler = null;
+        connectionUpHandler = null;
+        isConnectionDraggingRef.current = false;
+      };
+      connectionUpHandler = finishConnectionDrag;
+
+      window.addEventListener('mousemove', connectionMoveHandler);
+      window.addEventListener('mouseup', finishConnectionDrag, connectionDragCapture);
+      window.addEventListener('pointerup', finishConnectionDrag, connectionDragCapture);
+      window.addEventListener('pointercancel', finishConnectionDrag, connectionDragCapture);
+    };
 
     // drag behavior (this = <g class="node">; не использовать event.source — в D3DragEvent его нет)
     const dragBehavior = d3
       .drag<SVGGElement, PositionedNode>()
+      .filter((event) => {
+        if (isNodeResizingRef.current || isConnectionDraggingRef.current) return false;
+        const t = event.target as Element | null;
+        if (!t) return true;
+        return !t.closest('.resize-handle') && !t.closest('.connect-port');
+      })
       .on('start', function (event) {
         event.sourceEvent?.stopPropagation();
         isNodeDraggingRef.current = true;
@@ -810,15 +960,316 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         onNodePositionChange?.(d.id, d.x, d.y, { width: d.width, height: d.height });
       });
 
+    type ResizeHandle = {
+      key: string;
+      hx: -1 | 0 | 1;
+      hy: -1 | 0 | 1;
+      cursor: string;
+    };
+    const resizeHandles: ResizeHandle[] = [
+      { key: 'nw', hx: -1, hy: -1, cursor: 'nwse-resize' },
+      { key: 'n', hx: 0, hy: -1, cursor: 'ns-resize' },
+      { key: 'ne', hx: 1, hy: -1, cursor: 'nesw-resize' },
+      { key: 'e', hx: 1, hy: 0, cursor: 'ew-resize' },
+      { key: 'se', hx: 1, hy: 1, cursor: 'nwse-resize' },
+      { key: 's', hx: 0, hy: 1, cursor: 'ns-resize' },
+      { key: 'sw', hx: -1, hy: 1, cursor: 'nesw-resize' },
+      { key: 'w', hx: -1, hy: 0, cursor: 'ew-resize' },
+    ];
+
+    const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) ?? null : null;
+    const selectedForHandles = selectedNode && !disableNodeDrag ? selectedNode : null;
+
+    let resizeG = overlaysG.select<SVGGElement>('g.resize-handles');
+    if (resizeG.empty()) {
+      resizeG = overlaysG.append('g').attr('class', 'resize-handles');
+    }
+
+    const toHandleOffset = (
+      handle: ResizeHandle,
+      node: PositionedNode,
+    ): { x: number; y: number } => ({
+      x: (node.width / 2) * handle.hx,
+      y: (node.height / 2) * handle.hy,
+    });
+
+    const updateHandlePositions = (node: PositionedNode): void => {
+      resizeG.attr('transform', `translate(${node.x},${node.y})`);
+      resizeG.selectAll<SVGRectElement, ResizeHandle>('rect.resize-handle').each(function (h) {
+        const p = toHandleOffset(h, node);
+        d3.select(this).attr('x', p.x - 4).attr('y', p.y - 4);
+      });
+    };
+
+    const handleSelection = resizeG
+      .selectAll<SVGRectElement, ResizeHandle>('rect.resize-handle')
+      .data(selectedForHandles ? resizeHandles : [], (d) => d.key);
+    handleSelection.exit().remove();
+    const handleEnter = handleSelection
+      .enter()
+      .append('rect')
+      .attr('class', 'resize-handle')
+      .attr('width', 8)
+      .attr('height', 8)
+      .attr('rx', 2)
+      .attr('ry', 2)
+      .attr('fill', '#ffffff')
+      .attr('stroke', '#4f46e5')
+      .attr('stroke-width', 1.5)
+      .style('cursor', (d) => d.cursor);
+    const handleMerge = handleEnter.merge(handleSelection);
+
+    const resizeBehavior = d3
+      .drag<SVGRectElement, ResizeHandle>()
+      .on('start', (event) => {
+        event.sourceEvent?.stopPropagation();
+        event.sourceEvent?.preventDefault();
+        isNodeResizingRef.current = true;
+        isNodeDraggingRef.current = false;
+        edgeDragDrawRef.current = 'straight';
+      })
+      .on('drag', function (event, h) {
+        const node = selectedForHandles;
+        if (!node) return;
+        const k = d3.zoomTransform(svg).k || 1;
+        const sourceEvt = event.sourceEvent as MouseEvent | PointerEvent | undefined;
+        const stepX =
+          Number.isFinite(event.dx) && event.dx !== 0
+            ? event.dx
+            : (sourceEvt?.movementX ?? 0);
+        const stepY =
+          Number.isFinite(event.dy) && event.dy !== 0
+            ? event.dy
+            : (sourceEvt?.movementY ?? 0);
+        const dx = stepX / k;
+        const dy = stepY / k;
+        const oldW = node.width;
+        const oldH = node.height;
+
+        if (h.hx === 1) {
+          node.width = Math.max(NODE_MIN_WIDTH, oldW + dx);
+          node.x += (node.width - oldW) / 2;
+        } else if (h.hx === -1) {
+          node.width = Math.max(NODE_MIN_WIDTH, oldW - dx);
+          node.x += (oldW - node.width) / 2;
+        }
+
+        if (h.hy === 1) {
+          node.height = Math.max(NODE_MIN_HEIGHT, oldH + dy);
+          node.y += (node.height - oldH) / 2;
+        } else if (h.hy === -1) {
+          node.height = Math.max(NODE_MIN_HEIGHT, oldH - dy);
+          node.y += (oldH - node.height) / 2;
+        }
+
+        const nodeG = nodeMerge.filter((n) => n.id === node.id);
+        nodeG.attr('transform', `translate(${node.x},${node.y})`);
+        nodeG.each(function (n) {
+          const g = d3.select<SVGGElement, PositionedNode>(this);
+          g.selectAll<
+            SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement,
+            PositionedNode
+          >('rect,polygon,circle,ellipse,path')
+            .remove();
+          const w = n.width;
+          const hh = n.height;
+          if (n.shape === 'diamond') {
+            g.insert('polygon', 'text').attr('points', `0,${-hh / 2} ${w / 2},0 0,${hh / 2} ${-w / 2},0`);
+          } else if (n.shape === 'circle') {
+            g.insert('circle', 'text').attr('r', Math.min(w, hh) / 2);
+          } else if (n.shape === 'oval') {
+            g.insert('ellipse', 'text').attr('rx', w / 2).attr('ry', hh / 2);
+          } else if (n.shape === 'parallelogram') {
+            const skew = Math.min(16, w * 0.12);
+            g.insert('polygon', 'text').attr(
+              'points',
+              `${-w / 2 + skew},${-hh / 2} ${w / 2},${-hh / 2} ${w / 2 - skew},${hh / 2} ${-w / 2},${hh / 2}`,
+            );
+          } else if (n.shape === 'cloud') {
+            const sx = w / 90;
+            const sy = hh / 46;
+            g.insert('path', 'text')
+              .attr(
+                'd',
+                'M -45 -14 C -50 -28,-20 -32,-10 -20 C 0 -34,25 -32,28 -16 C 42 -22,52 -4,40 8 C 52 24,30 34,14 26 C 6 36,-18 36,-24 24 C -40 30,-56 14,-44 0 C -56 -6,-56 -20,-45 -14 Z',
+              )
+              .attr('transform', `scale(${sx} ${sy})`);
+          } else {
+            g.insert('rect', 'text')
+              .attr('x', -w / 2)
+              .attr('y', -hh / 2)
+              .attr('width', w)
+              .attr('height', hh)
+              .attr('rx', 6)
+              .attr('ry', 6);
+          }
+        });
+        nodeG
+          .select<
+            SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
+          >('rect,polygon,circle,ellipse,path')
+          .attr('fill', (n) => n.styles.fill ?? '#ffffff')
+          .attr('stroke', (n) => (n.id === selectedNodeId ? '#4f46e5' : n.styles.stroke ?? '#4f46e5'))
+          .attr('stroke-width', (n) => nodeStrokeWidthPx(n, selectedNodeId));
+        nodeG
+          .select<SVGCircleElement>('circle.connect-port')
+          .attr('cx', (n) => n.width / 2 + 2)
+          .attr('cy', 0);
+        updateHandlePositions(node);
+        refreshAllEdgeGraphics();
+      })
+      .on('end', () => {
+        const node = selectedForHandles;
+        if (!node) return;
+        isNodeResizingRef.current = false;
+        edgeDragDrawRef.current = 'orthogonal';
+        if (gridSnap) {
+          node.x = Math.round(node.x / 20) * 20;
+          node.y = Math.round(node.y / 20) * 20;
+          node.width = Math.round(node.width);
+          node.height = Math.round(node.height);
+          const nodeG = nodeMerge.filter((n) => n.id === node.id);
+          nodeG.attr('transform', `translate(${node.x},${node.y})`);
+          nodeG
+            .select<SVGCircleElement>('circle.connect-port')
+            .attr('cx', node.width / 2 + 2)
+            .attr('cy', 0);
+        }
+        updateHandlePositions(node);
+        refreshAllEdgeGraphics();
+        onNodePositionChange?.(node.id, node.x, node.y, {
+          width: node.width,
+          height: node.height,
+        });
+      });
+    handleMerge.call(resizeBehavior as any);
+    if (selectedForHandles) {
+      updateHandlePositions(selectedForHandles);
+    }
+
     nodeMerge
       .on('click', (event, d) => {
         event.stopPropagation();
         onSelectNode?.(d.id);
+        updateConnectPortVisibility();
       })
       .on('dblclick', (event, d) => {
         event.stopPropagation();
         onNodeDoubleClick?.(d.id);
+      })
+      .on('mouseenter', function (event, d) {
+        if (isConnectionDraggingRef.current) return;
+        d3.select(this)
+          .select<SVGCircleElement>('circle.connect-port')
+          .style('opacity', 1)
+          .style('pointer-events', 'all');
+      })
+      .on('mouseleave', function (event, d) {
+        if (d.id === selectedNodeId) return;
+        d3.select(this)
+          .select<SVGCircleElement>('circle.connect-port')
+          .style('opacity', 0)
+          .style('pointer-events', 'none');
       });
+
+    nodeMerge.select<SVGCircleElement>('circle.connect-port').on('mousedown', function (event, d) {
+      startConnectionDrag(d, event as unknown as MouseEvent);
+    });
+
+    updateConnectPortVisibility();
+
+    const RECONNECT_THRESH = 7;
+    edgeMerge
+      .select<SVGPathElement>('path.edge-hit')
+      .on('mousedown.reconnect', function (event: MouseEvent, d: PositionedEdge) {
+        if (model.metadata.diagramType === 'sequence' || !onReconnectEdge) return;
+        event.stopPropagation();
+        event.preventDefault();
+        removeConnectionDraftElements();
+        const fromN = nodeById.get(d.from);
+        if (!fromN) return;
+
+        const startClientX = event.clientX;
+        const startClientY = event.clientY;
+        let dragged = false;
+        let draftLine: d3.Selection<SVGLineElement, unknown, null, undefined> | null = null;
+        let lineStartX = 0;
+        let lineStartY = 0;
+        let lineStartReady = false;
+
+        isEdgeReconnectingRef.current = true;
+        edgeDragDrawRef.current = 'straight';
+
+        const move = (ev: MouseEvent): void => {
+          if (!dragged) {
+            if (Math.hypot(ev.clientX - startClientX, ev.clientY - startClientY) < RECONNECT_THRESH) {
+              return;
+            }
+            dragged = true;
+            draftLine = overlaysG
+              .append('line')
+              .attr('class', 'edge-reconnect-draft')
+              .attr('stroke', '#6366f1')
+              .attr('stroke-width', 2)
+              .attr('stroke-dasharray', '6 4')
+              .attr('pointer-events', 'none');
+          }
+          if (!draftLine) return;
+          if (!lineStartReady) {
+            const p = getCanvasPointFromClient(ev.clientX, ev.clientY);
+            const fakeTo: PositionedNodeLike = {
+              id: '_',
+              x: p.x,
+              y: p.y,
+              width: 2,
+              height: 2,
+              shape: 'rect',
+            };
+            const { x1, y1 } = computeEdgeEndpointsBetweenNodes(toGeom(fromN), fakeTo, d.type);
+            lineStartX = x1;
+            lineStartY = y1;
+            lineStartReady = true;
+          }
+          const p2 = getCanvasPointFromClient(ev.clientX, ev.clientY);
+          draftLine.attr('x1', lineStartX).attr('y1', lineStartY).attr('x2', p2.x).attr('y2', p2.y);
+          const tid = resolveTargetNodeId(ev, d.from);
+          const highlight = tid && tid !== d.from ? tid : null;
+          nodeMerge.classed('node-highlight', (n) => n.id === highlight);
+        };
+
+        let reconnectFinished = false;
+        const finishReconnect = (ev: Event): void => {
+          if (reconnectFinished) return;
+          reconnectFinished = true;
+          window.removeEventListener('mousemove', move);
+          window.removeEventListener('mouseup', finishReconnect, reconnectDragCapture);
+          window.removeEventListener('pointerup', finishReconnect, reconnectDragCapture);
+          window.removeEventListener('pointercancel', finishReconnect, reconnectDragCapture);
+          reconnectMoveHandler = null;
+          reconnectUpHandler = null;
+          draftLine?.remove();
+          nodeMerge.classed('node-highlight', false);
+          isEdgeReconnectingRef.current = false;
+          edgeDragDrawRef.current = 'orthogonal';
+          refreshAllEdgeGraphics();
+          const me = ev as MouseEvent;
+          if (dragged) {
+            const tid = resolveTargetNodeId(me, d.from);
+            if (tid && tid !== d.from && tid !== d.to) {
+              onReconnectEdge(d.edgeIndex, tid);
+              reconnectSuppressClickRef.current = true;
+            }
+          }
+        };
+
+        reconnectMoveHandler = move;
+        reconnectUpHandler = finishReconnect;
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', finishReconnect, reconnectDragCapture);
+        window.addEventListener('pointerup', finishReconnect, reconnectDragCapture);
+        window.addEventListener('pointercancel', finishReconnect, reconnectDragCapture);
+      });
+
     if (!disableNodeDrag) {
       nodeMerge.call(dragBehavior as any);
     }
@@ -828,6 +1279,24 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       onSelectNode?.(null);
       onSelectEdge?.(null);
     });
+
+    return () => {
+      if (connectionMoveHandler) window.removeEventListener('mousemove', connectionMoveHandler);
+      if (connectionUpHandler) {
+        window.removeEventListener('mouseup', connectionUpHandler, connectionDragCapture);
+        window.removeEventListener('pointerup', connectionUpHandler, connectionDragCapture);
+        window.removeEventListener('pointercancel', connectionUpHandler, connectionDragCapture);
+      }
+      if (reconnectMoveHandler) window.removeEventListener('mousemove', reconnectMoveHandler);
+      if (reconnectUpHandler) {
+        window.removeEventListener('mouseup', reconnectUpHandler, reconnectDragCapture);
+        window.removeEventListener('pointerup', reconnectUpHandler, reconnectDragCapture);
+        window.removeEventListener('pointercancel', reconnectUpHandler, reconnectDragCapture);
+      }
+      d3.select(svg).select('g.overlays').selectAll('.edge-draft-line, .edge-reconnect-draft').remove();
+      isConnectionDraggingRef.current = false;
+      isEdgeReconnectingRef.current = false;
+    };
   }, [
     model,
     width,
@@ -841,6 +1310,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     gridSnap,
     onNodeDoubleClick,
     onEdgeDoubleClick,
+    onCreateEdge,
+    onReconnectEdge,
   ]);
 
   return (
@@ -865,6 +1336,12 @@ function parseStyleStrokeWidthPx(styles: Record<string, string>): number | null 
   if (raw === undefined || raw === '') return null;
   const n = Number.parseFloat(String(raw).replace(/px/gi, '').trim());
   return Number.isFinite(n) ? n : null;
+}
+
+function edgeLineStrokeWidthPx(styles: Record<string, string>, selected: boolean): number {
+  const n = parseStyleStrokeWidthPx(styles);
+  const base = n ?? 2;
+  return selected ? Math.max(base, 3) : base;
 }
 
 function nodeStrokeWidthPx(

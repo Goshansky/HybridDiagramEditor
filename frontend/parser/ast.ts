@@ -67,6 +67,8 @@ export interface LayoutHintAst {
   type: 'LayoutHint';
   raw: string;
   layout: Record<string, LayoutHintData> | null;
+  /** Стили рёбер по индексу (строковый ключ), см. layoutHintSync. */
+  edgeStyles?: Record<string, Record<string, unknown>> | null;
   range: Range;
   error?: string;
 }

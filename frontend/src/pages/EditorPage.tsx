@@ -20,6 +20,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   mergeEdgeLayoutFromCache,
   parseMermaidByType,
+  replaceEdgeTarget,
   snapshotEdgesForLayoutCache,
   sourceHasLayoutPositionHints,
   stripLayoutHintsFromSource,
@@ -631,12 +632,19 @@ export const EditorPage: React.FC = () => {
     const edgeLine = payload.label
       ? `${edgeDraft.from} -->|${payload.label}| ${edgeDraft.to}`
       : `${edgeDraft.from} --> ${edgeDraft.to}`;
-    dispatch(enableAutoLayout());
-    setSource((prev) => `${prev.trimEnd()}\n  ${edgeLine}`);
+    setSource((prev) => appendEdgeLine(prev, edgeLine));
     setShowAddEdgeDialog(false);
     setEdgeDraft(null);
     setEdgePickActive(false);
     setStatusMessage(`Добавлена связь ${edgeDraft.from} -> ${edgeDraft.to}`);
+  };
+
+  const handleCreateEdgeByDrag = (from: string, to: string): void => {
+    if (currentDiagramType !== 'flowchart') return;
+    if (from === to) return;
+    const edgeLine = `${from} --> ${to}`;
+    setSource((prev) => appendEdgeLine(prev, edgeLine));
+    setStatusMessage(`Добавлена связь ${from} -> ${to}`);
   };
 
   const handleNodeEditSave = (payload: { label: string; shape: FlowNodeShape }): void => {
@@ -1031,6 +1039,20 @@ export const EditorPage: React.FC = () => {
                   if (currentDiagramType !== 'flowchart') return;
                   setEditingEdge(edge);
                 }}
+                onCreateEdge={handleCreateEdgeByDrag}
+                onReconnectEdge={(edgeIndex, newTo) => {
+                  if (currentDiagramType !== 'flowchart') return;
+                  const e = diagramModel?.edges[edgeIndex];
+                  if (!e) return;
+                  dispatch(disableAutoLayout());
+                  setSource((prev) =>
+                    replaceEdgeTarget(prev, e.from, e.to, newTo, {
+                      label: e.label,
+                      type: e.type,
+                    }),
+                  );
+                  setStatusMessage(`Связь: ${e.from} → ${newTo}`);
+                }}
                 onNodePositionChange={(id, x, y, size) => {
                   if (currentDiagramType === 'flowchart') {
                     dispatch(disableAutoLayout());
@@ -1334,4 +1356,8 @@ function findNodeShape(
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function appendEdgeLine(source: string, edgeLine: string): string {
+  return `${source.trimEnd()}\n  ${edgeLine}`;
 }

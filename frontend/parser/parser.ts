@@ -285,12 +285,18 @@ export class Parser {
         try {
           const parsed = JSON.parse(rawJson) as {
             layout?: Record<string, LayoutHintData>;
+            edgeStyles?: Record<string, Record<string, unknown>>;
           };
-          if (parsed && typeof parsed === 'object' && parsed.layout) {
+          if (
+            parsed &&
+            typeof parsed === 'object' &&
+            (parsed.layout || parsed.edgeStyles)
+          ) {
             const ast: LayoutHintAst = {
               type: 'LayoutHint',
               raw: rawJson,
-              layout: parsed.layout,
+              layout: parsed.layout ?? null,
+              edgeStyles: parsed.edgeStyles ?? null,
               range: makeRange(commentToken.start, end),
             };
             return ast;

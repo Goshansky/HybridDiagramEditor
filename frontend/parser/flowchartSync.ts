@@ -1,3 +1,4 @@
+import type { DiagramEdgeModel } from './model';
 import type { NodeShape } from './ast';
 
 export type FlowNodeShape = NodeShape;
@@ -55,6 +56,46 @@ export function replaceEdgeDefinition(
     return lines.join('\n');
   }
   return `${source.trimEnd()}\n  ${replacement}`;
+}
+
+/** Строка ребра в Mermaid (без ведущих пробелов). */
+export function serializeEdgeLine(edge: DiagramEdgeModel): string {
+  const op = edge.type === 'line' ? '---' : '-->';
+  const labeled = edge.label !== undefined && edge.label !== '';
+  if (labeled) {
+    return `${edge.from} ${op}|${edge.label}| ${edge.to}`;
+  }
+  return `${edge.from} ${op} ${edge.to}`;
+}
+
+/** Переподключить ребро к другому целевому узлу (замена строки в тексте). */
+export function replaceEdgeTarget(
+  source: string,
+  from: string,
+  oldTo: string,
+  newTo: string,
+  edge: { label?: string; type: 'arrow' | 'line' },
+): string {
+  const lines = source.split(/\r?\n/);
+  const op = edge.type === 'line' ? '---' : '-->';
+  const fromRe = escapeRegExp(from);
+  const toRe = escapeRegExp(oldTo);
+  const labeled = edge.label !== undefined && edge.label !== '';
+  const linePattern = labeled
+    ? new RegExp(
+        `\\b${fromRe}\\b\\s*${escapeRegExp(op)}\\|${escapeRegExp(edge.label ?? '')}\\|\\s*\\b${toRe}\\b`,
+      )
+    : new RegExp(`\\b${fromRe}\\b\\s*${escapeRegExp(op)}\\s*\\b${toRe}\\b`);
+  const replacement = labeled
+    ? `${from} ${op}|${edge.label}| ${newTo}`
+    : `${from} ${op} ${newTo}`;
+  const idx = lines.findIndex((line) => linePattern.test(line));
+  if (idx >= 0) {
+    const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
+    lines[idx] = `${indent}${replacement}`;
+    return lines.join('\n');
+  }
+  return source;
 }
 
 export function replaceEdgeOperator(

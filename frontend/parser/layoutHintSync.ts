@@ -5,8 +5,9 @@ interface LayoutPoint {
   height?: number;
 }
 
-interface LayoutDocument {
+export interface LayoutDocument {
   layout?: Record<string, LayoutPoint>;
+  edgeStyles?: Record<string, Record<string, unknown>>;
   [key: string]: unknown;
 }
 
@@ -130,4 +131,58 @@ export function upsertLayoutSize(
     width,
     height,
   });
+}
+
+export function getLayoutHintDocument(source: string): LayoutDocument | null {
+  const lines = source.split(/\r?\n/);
+  const block = extractHintBlock(lines);
+  return block?.json ?? null;
+}
+
+/** Стили ребра по индексу в `model.edges` — хранятся в JSON-хинте рядом с layout. */
+export function upsertEdgeStyleInHint(
+  source: string,
+  edgeIndex: number,
+  changes: Partial<{
+    stroke: string;
+    strokeWidth: number;
+    strokeDasharray: string | null;
+  }>,
+): string {
+  const lines = source.split(/\r?\n/);
+  const block = extractHintBlock(lines);
+  const key = String(edgeIndex);
+  const prev = block?.json.edgeStyles?.[key] as Record<string, unknown> | undefined;
+  const nextEdge: Record<string, unknown> = { ...(prev ?? {}) };
+  if (changes.stroke !== undefined) nextEdge.stroke = changes.stroke;
+  if (changes.strokeWidth !== undefined) nextEdge['stroke-width'] = `${changes.strokeWidth}px`;
+  if (changes.strokeDasharray !== undefined) {
+    if (changes.strokeDasharray === null || changes.strokeDasharray === '') {
+      delete nextEdge['stroke-dasharray'];
+    } else {
+      nextEdge['stroke-dasharray'] = changes.strokeDasharray;
+    }
+  }
+
+  if (block) {
+    const nextJson: LayoutDocument = { ...block.json };
+    nextJson.edgeStyles = {
+      ...(nextJson.edgeStyles ?? {}),
+      [key]: nextEdge,
+    };
+    const replacement = `%% ${JSON.stringify(nextJson)}`;
+    const nextLines = [
+      ...lines.slice(0, block.startLine),
+      replacement,
+      ...lines.slice(block.endLine + 1),
+    ];
+    return nextLines.join('\n');
+  }
+
+  const nextJson: LayoutDocument = {
+    layout: {},
+    edgeStyles: { [key]: nextEdge },
+  };
+  const hintLine = `%% ${JSON.stringify(nextJson)}`;
+  return source.trimEnd() ? `${source.trimEnd()}\n${hintLine}` : hintLine;
 }

@@ -35,3 +35,14 @@ body {
   background: var(--app-bg);
   color: var(--text-main);
 }
+
+/* Подсветка узла как цели при переподключении связи (DiagramCanvas) */
+.diagram-root g.node.node-highlight > rect,
+.diagram-root g.node.node-highlight > polygon,
+.diagram-root g.node.node-highlight > circle,
+.diagram-root g.node.node-highlight > ellipse,
+.diagram-root g.node.node-highlight > path {
+  stroke: gold !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 4px gold);
+}

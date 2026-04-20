@@ -38,6 +38,13 @@ const uiSlice = createSlice({
       state.selectedElementId = `edge:${action.payload}`;
       state.selectedElementType = 'edge';
     },
+    setSelectedElement(
+      state,
+      action: PayloadAction<{ id: string; type: SelectedElementType }>,
+    ) {
+      state.selectedElementId = action.payload.id;
+      state.selectedElementType = action.payload.type;
+    },
     clearSelectedElement(state) {
       state.selectedElementId = null;
       state.selectedElementType = null;
@@ -66,6 +73,7 @@ const uiSlice = createSlice({
 export const {
   setSelectedNode,
   setSelectedEdge,
+  setSelectedElement,
   clearSelectedElement,
   setGridSnap,
   toggleGridSnap,

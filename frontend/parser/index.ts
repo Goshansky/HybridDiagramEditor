@@ -12,7 +12,12 @@ import { parseErDiagram } from './erDiagram';
 
 export type DiagramType = 'flowchart' | 'class' | 'sequence' | 'er';
 
-export type { DiagramEdgePoint, DiagramModel, DiagramSubgraphModel } from './model';
+export type {
+  DiagramEdgeModel,
+  DiagramEdgePoint,
+  DiagramModel,
+  DiagramSubgraphModel,
+} from './model';
 export {
   mergeEdgeLayoutFromCache,
   snapshotEdgesForLayoutCache,
@@ -23,7 +28,11 @@ export {
   stripLayoutHintsFromSource,
   upsertLayoutHint,
   upsertLayoutSize,
-};
+  getLayoutHintDocument,
+  upsertEdgeStyleInHint,
+  type LayoutDocument,
+} from './layoutHintSync';
+export { generateMermaidFromModel } from './generateMermaid';
 export * from './flowchartSync';
 
 export function parseMermaidFlowchart(

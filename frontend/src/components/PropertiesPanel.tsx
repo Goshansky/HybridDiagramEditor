@@ -5,6 +5,7 @@ import {
   replaceEdgeDefinition,
   replaceEdgeOperator,
   replaceNodeDefinition,
+  upsertEdgeStyleInHint,
   upsertLayoutHint,
   upsertLayoutSize,
   upsertNodeStyleLine,
@@ -44,6 +45,23 @@ function normalizeHex(input: string, fallback: string): string {
   const t = input?.trim();
   if (t?.startsWith('#') && (t.length === 7 || t.length === 4)) return t;
   return fallback;
+}
+
+function parseEdgeStrokeColor(styles: Record<string, string>): string {
+  return normalizeHex(styles.stroke ?? '', '#4b5563');
+}
+
+function parseEdgeStrokeWidthForInput(styles: Record<string, string>): number {
+  const raw = styles['stroke-width'] ?? styles.strokeWidth;
+  if (raw === undefined || raw === '') return 2;
+  const n = Number.parseFloat(String(raw).replace(/px/gi, '').trim());
+  return Number.isFinite(n) ? Math.min(10, Math.max(1, Math.round(n))) : 2;
+}
+
+function edgeDashMode(styles: Record<string, string>): 'solid' | 'dashed' {
+  const d = styles['stroke-dasharray'];
+  if (!d || d === 'none') return 'solid';
+  return 'dashed';
 }
 
 function nodeAnchor(model: DiagramModel, nodeId: string): { x: number; y: number } {
@@ -294,6 +312,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   if (selectedEdgeIndex !== null && model.edges[selectedEdgeIndex]) {
     const edge = model.edges[selectedEdgeIndex];
+    const apply = (next: string): void => onSourceChange(next);
+    const stroke = parseEdgeStrokeColor(edge.styles ?? {});
+    const sw = parseEdgeStrokeWidthForInput(edge.styles ?? {});
+    const dash = edgeDashMode(edge.styles ?? {});
     return (
       <aside style={panelOuter}>
         <div style={panelHeader}>
@@ -360,6 +382,62 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               >
                 <option value="arrow">Стрелка (--&gt;)</option>
                 <option value="line">Линия (---)</option>
+              </select>
+            </label>
+          </section>
+          <section style={section}>
+            <div style={sectionTitle}>Внешний вид линии</div>
+            <label style={label}>
+              Толщина (px)
+              <input
+                type="number"
+                min={1}
+                max={10}
+                step={1}
+                style={input}
+                value={sw}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (!Number.isFinite(n)) return;
+                  apply(
+                    upsertEdgeStyleInHint(source, selectedEdgeIndex, {
+                      strokeWidth: Math.min(10, Math.max(1, n)),
+                    }),
+                  );
+                }}
+              />
+            </label>
+            <label style={label}>
+              Цвет
+              <input
+                type="color"
+                style={colorInput}
+                value={stroke}
+                onChange={(e) =>
+                  apply(
+                    upsertEdgeStyleInHint(source, selectedEdgeIndex, {
+                      stroke: e.target.value,
+                    }),
+                  )
+                }
+              />
+            </label>
+            <label style={label}>
+              Пунктир
+              <select
+                style={input}
+                value={dash}
+                onChange={(e) => {
+                  const mode = e.target.value as 'solid' | 'dashed';
+                  apply(
+                    upsertEdgeStyleInHint(source, selectedEdgeIndex, {
+                      strokeDasharray: mode === 'dashed' ? '5 5' : null,
+                    }),
+                  );
+                }}
+              >
+                <option value="solid">Сплошная</option>
+                <option value="dashed">Пунктир</option>
               </select>
             </label>
           </section>
