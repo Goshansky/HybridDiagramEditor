@@ -2,7 +2,16 @@
  * Точки выхода луча из центра узла к цели — граница фигуры (flowchart).
  */
 
-export type NodeShape = 'rect' | 'circle' | 'diamond' | 'oval' | 'parallelogram' | 'cloud';
+export type NodeShape =
+  | 'rect'
+  | 'circle'
+  | 'diamond'
+  | 'oval'
+  | 'parallelogram'
+  | 'cloud'
+  | 'trapezoid_slash'
+  | 'trapezoid_backslash'
+  | 'flag';
 
 export interface PositionedNodeLike {
   id: string;
@@ -155,6 +164,37 @@ function boundaryPointToward(
         [-hw + skew, -hh],
         [hw, -hh],
         [hw - skew, hh],
+        [-hw, hh],
+      ];
+      return exitConvexPolygon(cx, cy, verts, targetX, targetY);
+    }
+    case 'trapezoid_slash': {
+      const skew = Math.min(16, w * 0.12);
+      const verts: Array<[number, number]> = [
+        [-hw + skew, -hh],
+        [hw, -hh],
+        [hw - skew, hh],
+        [-hw, hh],
+      ];
+      return exitConvexPolygon(cx, cy, verts, targetX, targetY);
+    }
+    case 'trapezoid_backslash': {
+      const skew = Math.min(16, w * 0.12);
+      const verts: Array<[number, number]> = [
+        [-hw, -hh],
+        [hw - skew, -hh],
+        [hw, hh],
+        [-hw + skew, hh],
+      ];
+      return exitConvexPolygon(cx, cy, verts, targetX, targetY);
+    }
+    case 'flag': {
+      const notch = Math.min(10, w * 0.1);
+      const verts: Array<[number, number]> = [
+        [-hw, -hh],
+        [hw - notch, -hh],
+        [hw + notch * 0.6, 0],
+        [hw - notch, hh],
         [-hw, hh],
       ];
       return exitConvexPolygon(cx, cy, verts, targetX, targetY);

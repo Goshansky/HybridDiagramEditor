@@ -16,12 +16,20 @@ export type NodeShape =
   | 'diamond'
   | 'oval'
   | 'parallelogram'
-  | 'cloud';
+  | 'cloud'
+  /** Mermaid `[/text/]` (трапеция). */
+  | 'trapezoid_slash'
+  /** Mermaid `[\text\]`. */
+  | 'trapezoid_backslash'
+  /** Mermaid `>text]` (флаг). */
+  | 'flag';
 
 export interface ParsedNode {
   id: string;
   label?: string;
   shape?: NodeShape;
+  /** Класс из `:::className`. */
+  className?: string;
   range: Range;
 }
 
@@ -79,6 +87,33 @@ export interface CommentStatementAst {
   range: Range;
 }
 
+export interface ClassDefStatementAst {
+  type: 'ClassDefStatement';
+  name: string;
+  rawStyle: string;
+  range: Range;
+}
+
+export interface ClassStatementAst {
+  type: 'ClassStatement';
+  nodeIds: string[];
+  className: string;
+  range: Range;
+}
+
+export interface LinkStyleStatementAst {
+  type: 'LinkStyleStatement';
+  target: number | 'default';
+  rawStyle: string;
+  range: Range;
+}
+
+export interface DirectionStatementAst {
+  type: 'DirectionStatement';
+  direction: Direction;
+  range: Range;
+}
+
 export type StatementAst =
   | NodeStatementAst
   | EdgeStatementAst
@@ -86,13 +121,19 @@ export type StatementAst =
   | LayoutHintAst
   | CommentStatementAst
   | GraphAst
-  | SubgraphBlockAst;
+  | SubgraphBlockAst
+  | ClassDefStatementAst
+  | ClassStatementAst
+  | LinkStyleStatementAst
+  | DirectionStatementAst;
 
 /** Вложенный блок `subgraph id [заголовок] … end`. */
 export interface SubgraphBlockAst {
   type: 'SubgraphBlock';
   id: string;
   title?: string;
+  /** Первый `direction …` внутри блока (остальные отброшены). */
+  direction?: Direction;
   body: StatementAst[];
   range: Range;
 }

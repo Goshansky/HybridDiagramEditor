@@ -1,9 +1,14 @@
 import {
+  type ClassDefStatementAst,
+  type ClassStatementAst,
   type DiagramAst,
+  type Direction,
+  type DirectionStatementAst,
   type EdgeOperator,
   type GraphAst,
   type LayoutHintAst,
   type LayoutHintData,
+  type LinkStyleStatementAst,
   type NodeShape,
   type NodeStatementAst,
   type ParsedNode,
@@ -91,15 +96,44 @@ export class Parser {
       }
     }
     this.consumeLineRemainder();
-    const body = this.parseBlockUntilMatchingEnd();
+    const rawBody = this.parseBlockUntilMatchingEnd();
     const endTok = this.previous();
+    const { body, direction } = this.extractFirstDirectionFromSubgraphBody(rawBody);
     return {
       type: 'SubgraphBlock',
       id,
       title,
+      direction,
       body,
       range: makeRange(startTok.start, endTok.end),
     };
+  }
+
+  /** Первый `direction …` в теле подграфа выносится в поле блока; вложенные subgraph обрабатываются рекурсивно. */
+  private extractFirstDirectionFromSubgraphBody(stmts: StatementAst[]): {
+    body: StatementAst[];
+    direction?: Direction;
+  } {
+    let direction: Direction | undefined;
+    const body: StatementAst[] = [];
+    for (const s of stmts) {
+      if (s.type === 'DirectionStatement') {
+        if (!direction) direction = s.direction;
+        continue;
+      }
+      if (s.type === 'SubgraphBlock') {
+        const inner = this.extractFirstDirectionFromSubgraphBody(s.body);
+        body.push({
+          ...s,
+          type: 'SubgraphBlock',
+          body: inner.body,
+          direction: inner.direction,
+        });
+      } else {
+        body.push(s);
+      }
+    }
+    return { body, direction };
   }
 
   private parseBlockUntilMatchingEnd(): StatementAst[] {
@@ -154,6 +188,16 @@ export class Parser {
         return this.parseGraph();
       case 'STYLE':
         return this.parseStyle();
+      case 'CLASSDEF':
+        return this.parseClassDef();
+      case 'CLASS': {
+        const c = this.parseClassStatement();
+        return c;
+      }
+      case 'LINKSTYLE':
+        return this.parseLinkStyle();
+      case 'DIRECTION_KW':
+        return this.parseDirectionStatement();
       case 'COMMENT':
         return this.parseLayoutOrComment();
       case 'IDENT':
@@ -161,8 +205,15 @@ export class Parser {
       case 'NEWLINE':
         this.advance();
         return null;
+      case 'TRIPLE_COLON':
+        // eslint-disable-next-line no-console
+        console.warn('Mermaid: ::: вне узла, строка пропущена', token.start);
+        this.consumeLineRemainder();
+        return null;
       default:
-        this.advance();
+        // eslint-disable-next-line no-console
+        console.warn(`Mermaid: неподдерживаемый токен ${token.type}, строка пропущена`, token.start);
+        this.consumeLineRemainder();
         return null;
     }
   }
@@ -227,6 +278,7 @@ export class Parser {
     const idToken = this.consume('IDENT');
     let label: string | undefined;
     let shape: NodeShape | undefined;
+    let className: string | undefined;
     let end = idToken.end;
 
     if (this.check('NODE_SHAPE_TEXT')) {
@@ -236,11 +288,105 @@ export class Parser {
       end = shapeToken.end;
     }
 
+    if (this.check('TRIPLE_COLON')) {
+      this.consume('TRIPLE_COLON');
+      const clsTok = this.consume('IDENT');
+      className = clsTok.value ?? undefined;
+      end = clsTok.end;
+    }
+
     return {
       id: idToken.value ?? '',
       label,
       shape,
+      className,
       range: makeRange(idToken.start, end),
+    };
+  }
+
+  private parseClassDef(): ClassDefStatementAst {
+    const kw = this.consume('CLASSDEF');
+    this.skipWhitespaceNewlinesWithinStatement();
+    const nameTok = this.consume('IDENT');
+    const styleStart = this.peek().startOffset;
+    this.consumeLineRemainder();
+    const rawStyle = this.source.slice(styleStart, this.previous().endOffset).trim();
+    return {
+      type: 'ClassDefStatement',
+      name: nameTok.value ?? '',
+      rawStyle,
+      range: makeRange(kw.start, this.previous().end),
+    };
+  }
+
+  private parseClassStatement(): ClassStatementAst | null {
+    const kw = this.consume('CLASS');
+    const styleStart = this.peek().startOffset;
+    this.consumeLineRemainder();
+    const raw = this.source.slice(styleStart, this.previous().endOffset).trim();
+    const parts = raw.split(/\s+/).filter(Boolean);
+    if (parts.length < 2) {
+      // eslint-disable-next-line no-console
+      console.warn('class: ожидались id узлов и имя класса, пропуск', kw.start);
+      return null;
+    }
+    const className = parts[parts.length - 1]!;
+    const idsPart = parts.slice(0, -1).join(' ');
+    const nodeIds = idsPart.split(',').map((x) => x.trim()).filter(Boolean);
+    if (nodeIds.length === 0) {
+      // eslint-disable-next-line no-console
+      console.warn('class: нет идентификаторов узлов, пропуск', kw.start);
+      return null;
+    }
+    return {
+      type: 'ClassStatement',
+      nodeIds,
+      className,
+      range: makeRange(kw.start, this.previous().end),
+    };
+  }
+
+  private parseLinkStyle(): LinkStyleStatementAst | null {
+    const kw = this.consume('LINKSTYLE');
+    const styleStart = this.peek().startOffset;
+    this.consumeLineRemainder();
+    const raw = this.source.slice(styleStart, this.previous().endOffset).trim();
+    const m = raw.match(/^(\d+|default)\s*(.*)$/i);
+    if (!m) {
+      // eslint-disable-next-line no-console
+      console.warn('linkStyle: не удалось разобрать, пропуск:', raw);
+      return null;
+    }
+    let target: number | 'default';
+    if (m[1]!.toLowerCase() === 'default') {
+      target = 'default';
+    } else {
+      const n = Number.parseInt(m[1]!, 10);
+      if (!Number.isFinite(n) || n < 0) {
+        // eslint-disable-next-line no-console
+        console.warn('linkStyle: неверный индекс, пропуск:', m[1]);
+        return null;
+      }
+      target = n;
+    }
+    const rawStyle = (m[2] ?? '').trim();
+    return {
+      type: 'LinkStyleStatement',
+      target,
+      rawStyle,
+      range: makeRange(kw.start, this.previous().end),
+    };
+  }
+
+  private parseDirectionStatement(): DirectionStatementAst {
+    const kw = this.consume('DIRECTION_KW');
+    this.skipWhitespaceNewlinesWithinStatement();
+    const d = this.consume('DIRECTION');
+    this.consumeLineRemainder();
+    return {
+      type: 'DirectionStatement',
+      direction: (d.value ?? 'TD') as Direction,
+      range: makeRange(kw.start, this.previous().end),
     };
   }
 

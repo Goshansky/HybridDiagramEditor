@@ -36,7 +36,16 @@ interface DiagramCanvasProps {
   gridSnap?: boolean;
 }
 
-type NodeShape = 'rect' | 'circle' | 'diamond' | 'oval' | 'parallelogram' | 'cloud';
+type NodeShape =
+  | 'rect'
+  | 'circle'
+  | 'diamond'
+  | 'oval'
+  | 'parallelogram'
+  | 'cloud'
+  | 'trapezoid_slash'
+  | 'trapezoid_backslash'
+  | 'flag';
 
 interface PositionedNode {
   id: string;
@@ -788,6 +797,26 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           'points',
           `${-w / 2 + skew},${-h / 2} ${w / 2},${-h / 2} ${w / 2 - skew},${h / 2} ${-w / 2},${h / 2}`,
         );
+      } else if (d.shape === 'trapezoid_slash') {
+        const skew = Math.min(16, w * 0.12);
+        g.insert('polygon', 'text').attr(
+          'points',
+          `${-w / 2 + skew},${-h / 2} ${w / 2},${-h / 2} ${w / 2 - skew},${h / 2} ${-w / 2},${h / 2}`,
+        );
+      } else if (d.shape === 'trapezoid_backslash') {
+        const skew = Math.min(16, w * 0.12);
+        g.insert('polygon', 'text').attr(
+          'points',
+          `${-w / 2},${-h / 2} ${w / 2 - skew},${-h / 2} ${w / 2},${h / 2} ${-w / 2 + skew},${h / 2}`,
+        );
+      } else if (d.shape === 'flag') {
+        const hw = w / 2;
+        const hh = h / 2;
+        const notch = Math.min(10, w * 0.1);
+        g.insert('polygon', 'text').attr(
+          'points',
+          `${-hw},${-hh} ${hw - notch},${-hh} ${hw + notch * 0.6},0 ${hw - notch},${hh} ${-hw},${hh}`,
+        );
       } else if (d.shape === 'cloud') {
         const sx = w / 90;
         const sy = h / 46;
@@ -809,6 +838,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
       setSvgTextMultiline(g.select<SVGTextElement>('text'), d.label);
     });
+
+    nodeMerge
+      .select<SVGTextElement>('text')
+      .style('fill', (d) => d.styles.color ?? '#1f2937');
 
     nodeMerge.attr('transform', (d) => `translate(${d.x},${d.y})`);
     nodeMerge.attr('data-node-id', (d) => d.id);
@@ -1096,6 +1129,26 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
             g.insert('polygon', 'text').attr(
               'points',
               `${-w / 2 + skew},${-hh / 2} ${w / 2},${-hh / 2} ${w / 2 - skew},${hh / 2} ${-w / 2},${hh / 2}`,
+            );
+          } else if (n.shape === 'trapezoid_slash') {
+            const skew = Math.min(16, w * 0.12);
+            g.insert('polygon', 'text').attr(
+              'points',
+              `${-w / 2 + skew},${-hh / 2} ${w / 2},${-hh / 2} ${w / 2 - skew},${hh / 2} ${-w / 2},${hh / 2}`,
+            );
+          } else if (n.shape === 'trapezoid_backslash') {
+            const skew = Math.min(16, w * 0.12);
+            g.insert('polygon', 'text').attr(
+              'points',
+              `${-w / 2},${-hh / 2} ${w / 2 - skew},${-hh / 2} ${w / 2},${hh / 2} ${-w / 2 + skew},${hh / 2}`,
+            );
+          } else if (n.shape === 'flag') {
+            const hw = w / 2;
+            const hhh = hh / 2;
+            const notch = Math.min(10, w * 0.1);
+            g.insert('polygon', 'text').attr(
+              'points',
+              `${-hw},${-hhh} ${hw - notch},${-hhh} ${hw + notch * 0.6},0 ${hw - notch},${hhh} ${-hw},${hhh}`,
             );
           } else if (n.shape === 'cloud') {
             const sx = w / 90;

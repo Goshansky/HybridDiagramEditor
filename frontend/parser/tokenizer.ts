@@ -5,12 +5,17 @@ export type TokenType =
   | 'STYLE'
   | 'SUBGRAPH'
   | 'DIRECTION'
+  | 'CLASSDEF'
+  | 'CLASS'
+  | 'LINKSTYLE'
+  | 'DIRECTION_KW'
   | 'IDENT'
   | 'ARROW' // -->
   | 'DOTTED_ARROW' // -.->
   | 'LINE' // ---
   | 'EDGE_LABEL' // |text|
   | 'NODE_SHAPE_TEXT' // [Text], ((Text)), {Text}
+  | 'TRIPLE_COLON' // :::className
   | 'COMMENT'
   | 'NEWLINE'
   | 'EOF';
@@ -76,6 +81,25 @@ export class Lexer {
       // Edge labels: |text|
       if (ch === '|') {
         tokens.push(this.readEdgeLabel());
+        continue;
+      }
+
+      // `:::className` после узла
+      if (ch === ':' && this.input.slice(this.index, this.index + 3) === ':::') {
+        const start = this.currentPosition();
+        const startOffset = this.index;
+        this.advance();
+        this.advance();
+        this.advance();
+        const end = this.currentPosition();
+        const endOffset = this.index;
+        tokens.push({
+          type: 'TRIPLE_COLON',
+          start,
+          end,
+          startOffset,
+          endOffset,
+        });
         continue;
       }
 
@@ -296,6 +320,32 @@ export class Lexer {
       }
       if (this.peek() === ']') this.advance();
       if (this.peek() === ')') this.advance();
+    } else if (opener === '[' && this.peekNext() === '/') {
+      // Mermaid [/Text/]
+      shape = 'trapezoid_slash';
+      this.advance();
+      this.advance();
+      while (!this.isAtEnd() && this.peek() !== '\n') {
+        if (this.peek() === '/' && this.peekNext() === ']') break;
+        text += this.advance();
+      }
+      if (this.peek() === '/' && this.peekNext() === ']') {
+        this.advance();
+        this.advance();
+      }
+    } else if (opener === '[' && this.peekNext() === '\\') {
+      // Mermaid [\Text\]
+      shape = 'trapezoid_backslash';
+      this.advance();
+      this.advance();
+      while (!this.isAtEnd() && this.peek() !== '\n') {
+        if (this.peek() === '\\' && this.peekNext() === ']') break;
+        text += this.advance();
+      }
+      if (this.peek() === '\\' && this.peekNext() === ']') {
+        this.advance();
+        this.advance();
+      }
     } else if (opener === '[' && this.peekNext() === '[') {
       // Parallelogram: [[Text]]
       shape = 'parallelogram';
@@ -320,8 +370,8 @@ export class Lexer {
       if (this.peek() === ')') this.advance();
       if (this.peek() === ']') this.advance();
     } else if (opener === '>') {
-      // Asymmetric cloud-like: >Text]
-      shape = 'cloud';
+      // Mermaid >Text] (флаг)
+      shape = 'flag';
       this.advance();
       while (!this.isAtEnd() && this.peek() !== '\n' && this.peek() !== ']') {
         text += this.advance();
@@ -382,9 +432,28 @@ export class Lexer {
     } else if (lower === 'subgraph') {
       type = 'SUBGRAPH';
       value = text;
-    } else if (text === 'TD' || text === 'LR' || text === 'BT' || text === 'RL') {
+    } else if (lower === 'classdef') {
+      type = 'CLASSDEF';
+      value = text;
+    } else if (lower === 'class') {
+      type = 'CLASS';
+      value = text;
+    } else if (lower === 'linkstyle') {
+      type = 'LINKSTYLE';
+      value = text;
+    } else if (lower === 'direction') {
+      type = 'DIRECTION_KW';
+      value = text;
+    } else if (
+      lower === 'td' ||
+      lower === 'tb' ||
+      lower === 'lr' ||
+      lower === 'bt' ||
+      lower === 'rl'
+    ) {
+      // Mermaid: TD/TB — сверху вниз; регистр и TB как у Live Editor
       type = 'DIRECTION';
-      value = text as Direction;
+      value = (lower === 'tb' || lower === 'td' ? 'TD' : lower.toUpperCase()) as Direction;
     }
 
     return {

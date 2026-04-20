@@ -120,5 +120,36 @@ flowchart TD
   assert(dashEdge?.styles['stroke-dasharray'] === '6 4', 'пунктирное ребро');
   const nodeASg = sgModel.nodes.find((n) => n.id === 'A');
   assert(nodeASg?.styles.fill === '#f9f', 'style на узел A применён');
+
+  const advanced = `
+flowchart TD
+  classDef se fill:#e0f7fa,stroke:#006064,color:#004d40
+  subgraph G1 [Группа]
+    direction LR
+    X[/slash/] --> Y[\\back\\]
+    Z((Z)) --> W>flag]
+  end
+  X:::se
+  linkStyle 0 stroke:#f00,stroke-width:2px
+  linkStyle default stroke-dasharray:4 3
+`.trim();
+  const adv = parseMermaidFlowchart(advanced);
+  assert(adv.subgraphs?.some((s) => s.id === 'G1'), 'subgraph G1');
+  assert(adv.subgraphs?.find((s) => s.id === 'G1')?.direction === 'LR', 'direction LR в subgraph');
+  const xNode = adv.nodes.find((n) => n.id === 'X');
+  assert(xNode?.shape === 'trapezoid_slash', 'форма [/…/]');
+  assert(xNode?.styles.fill === '#e0f7fa', 'classDef через :::');
+  assert(adv.edges[0]?.styles.stroke === '#f00', 'linkStyle 0');
+  assert(adv.edges.every((e) => e.styles['stroke-dasharray'] === '4 3'), 'linkStyle default');
+
+  const dirTb = `
+flowchart TD
+  subgraph S1 [x]
+    direction Tb
+    A --> B
+  end
+`.trim();
+  const mTb = parseMermaidFlowchart(dirTb);
+  assert(mTb.subgraphs?.find((s) => s.id === 'S1')?.direction === 'TD', 'direction TB → TD');
 }
 
