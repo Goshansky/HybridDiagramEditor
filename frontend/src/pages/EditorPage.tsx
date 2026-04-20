@@ -1055,6 +1055,9 @@ export const EditorPage: React.FC = () => {
                 }}
                 onNodePositionChange={(id, x, y, size) => {
                   if (currentDiagramType === 'flowchart') {
+                    if (diagramModel) {
+                      dagreEdgeCacheRef.current = snapshotEdgesForLayoutCache(diagramModel);
+                    }
                     dispatch(disableAutoLayout());
                   }
                   setSource((prevSource) => {

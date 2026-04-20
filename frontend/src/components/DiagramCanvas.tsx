@@ -341,6 +341,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
     const fallbackLayout = computeLayout(model, width, height);
 
+    /** Позиция узла в начале drag — чтобы не слать onNodePositionChange при клике без перемещения. */
+    const nodeDragStartById = new Map<string, { x: number; y: number }>();
+
     const positionedNodes: PositionedNode[] = model.nodes.map((n) => {
       const hasXY =
         typeof n.x === 'number' &&
@@ -904,8 +907,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         if (!t) return true;
         return !t.closest('.resize-handle') && !t.closest('.connect-port');
       })
-      .on('start', function (event) {
+      .on('start', function (event, d) {
         event.sourceEvent?.stopPropagation();
+        nodeDragStartById.set(d.id, { x: d.x, y: d.y });
         isNodeDraggingRef.current = true;
         edgeDragDrawRef.current = 'straight';
         d3.select(svg).style('cursor', 'grabbing');
@@ -957,7 +961,15 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           .attr('opacity', 1)
           .attr('stroke-width', (n) => nodeStrokeWidthPx(n, selectedNodeId));
         refreshAllEdgeGraphics();
-        onNodePositionChange?.(d.id, d.x, d.y, { width: d.width, height: d.height });
+        const start = nodeDragStartById.get(d.id);
+        nodeDragStartById.delete(d.id);
+        const moved =
+          !start ||
+          Math.abs(d.x - start.x) > 1e-6 ||
+          Math.abs(d.y - start.y) > 1e-6;
+        if (moved) {
+          onNodePositionChange?.(d.id, d.x, d.y, { width: d.width, height: d.height });
+        }
       });
 
     type ResizeHandle = {
