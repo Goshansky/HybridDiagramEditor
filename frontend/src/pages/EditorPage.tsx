@@ -421,24 +421,6 @@ export const EditorPage: React.FC = () => {
     }
   };
 
-  const restoreFromServer = async (): Promise<void> => {
-    if (selectedDiagramId === null) {
-      setStatusMessage('Сначала выбери диаграмму из списка');
-      return;
-    }
-    try {
-      const diagram = await getDiagram(selectedDiagramId);
-      setSource(diagram.content);
-      dispatch(enableAutoLayout());
-      setStatusMessage(`Загружена сохраненная версия "${diagram.name}"`);
-    } catch (error) {
-      const message = axios.isAxiosError(error)
-        ? (error.response?.data?.detail ?? 'Не удалось загрузить диаграмму')
-        : 'Не удалось загрузить диаграмму';
-      setStatusMessage(message);
-    }
-  };
-
   const loadVersionsForDiagramId = async (diagramId: number | null): Promise<void> => {
     if (diagramId === null) {
       dispatch(clearVersions());
