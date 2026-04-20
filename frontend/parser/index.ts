@@ -13,6 +13,11 @@ import { parseErDiagram } from './erDiagram';
 export type DiagramType = 'flowchart' | 'class' | 'sequence' | 'er';
 
 export type {
+  ClassBoxModel,
+  ClassFieldModel,
+  ClassMethodModel,
+  ClassNoteModel,
+  ClassRelationKind,
   DiagramEdgeModel,
   DiagramEdgePoint,
   DiagramModel,
@@ -48,7 +53,7 @@ export function parseMermaidByType(
   useAutoLayout = true,
 ): DiagramModel {
   if (diagramType === 'class') {
-    return parseClassDiagram(source);
+    return parseClassDiagram(source, useAutoLayout);
   }
   if (diagramType === 'sequence') {
     return parseSequenceDiagram(source);

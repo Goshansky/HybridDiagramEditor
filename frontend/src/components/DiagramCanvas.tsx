@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
-import type { DiagramModel } from '../../parser';
+import type { ClassBoxModel, ClassRelationKind, DiagramModel } from '../../parser';
 import {
   ARROW_TIP_GAP,
   computeEdgeEndpointsBetweenNodes,
@@ -45,7 +45,8 @@ type NodeShape =
   | 'cloud'
   | 'trapezoid_slash'
   | 'trapezoid_backslash'
-  | 'flag';
+  | 'flag'
+  | 'class_box';
 
 interface PositionedNode {
   id: string;
@@ -56,6 +57,7 @@ interface PositionedNode {
   y: number;
   width: number;
   height: number;
+  classBox?: ClassBoxModel;
 }
 
 interface PositionedEdge {
@@ -77,6 +79,9 @@ interface PositionedEdge {
   toH: number;
   /** Маршрут dagre; при live-drag не используется — только прямые границы. */
   routePoints?: { x: number; y: number }[];
+  classRelation?: ClassRelationKind;
+  fromMultiplicity?: string;
+  toMultiplicity?: string;
 }
 
 const NODE_WIDTH = 110;
@@ -84,6 +89,162 @@ const NODE_HEIGHT = 46;
 const NODE_LINE_HEIGHT_PX = 16;
 const NODE_MIN_WIDTH = 44;
 const NODE_MIN_HEIGHT = 32;
+const CLASS_MEMBER_LINE = 13;
+
+/** Фигура узла (не порт связи). `d3.select('…circle…')` брал бы `circle.connect-port` первым. */
+function selectNodeShapeElements<G extends SVGGElement>(
+  nodeG: d3.Selection<G, PositionedNode, any, any>,
+): d3.Selection<
+  SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement,
+  PositionedNode,
+  G,
+  PositionedNode
+> {
+  return nodeG
+    .selectAll<
+      SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement,
+      PositionedNode
+    >('rect,polygon,circle,ellipse,path')
+    .filter(function (this: SVGElement, d: PositionedNode) {
+      return d.shape !== 'class_box' && !this.classList.contains('connect-port');
+    });
+}
+
+function umlClassEdgePresentation(d: PositionedEdge): {
+  dash: string | null;
+  markerStart: string | null;
+  markerEnd: string | null;
+} {
+  const k = d.classRelation;
+  const styleDash = d.styles['stroke-dasharray'] ?? null;
+  if (!k) {
+    return {
+      dash: styleDash,
+      markerStart: null,
+      markerEnd: d.type === 'arrow' ? 'url(#edge-arrowhead)' : null,
+    };
+  }
+  switch (k) {
+    case 'inheritance':
+      return { dash: styleDash, markerStart: null, markerEnd: 'url(#uml-inherit)' };
+    case 'implementation':
+      return { dash: styleDash ?? '6 4', markerStart: null, markerEnd: 'url(#uml-inherit)' };
+    case 'composition':
+      return { dash: styleDash, markerStart: 'url(#uml-compose)', markerEnd: null };
+    case 'aggregation':
+      return { dash: styleDash, markerStart: 'url(#uml-aggregate)', markerEnd: null };
+    case 'association':
+      return { dash: styleDash, markerStart: null, markerEnd: 'url(#edge-arrowhead)' };
+    case 'dependency':
+      return { dash: styleDash ?? '6 4', markerStart: null, markerEnd: 'url(#edge-arrowhead)' };
+    case 'bidirectional':
+      return { dash: styleDash, markerStart: null, markerEnd: null };
+    default:
+      return { dash: styleDash, markerStart: null, markerEnd: 'url(#edge-arrowhead)' };
+  }
+}
+
+function paintClassBoxNode(
+  g: d3.Selection<SVGGElement, PositionedNode, null, undefined>,
+  d: PositionedNode,
+): void {
+  const cb = d.classBox;
+  if (!cb || d.shape !== 'class_box') return;
+  g.selectAll<SVGTextElement>('text').remove();
+  g.selectAll<
+    SVGRectElement | SVGPolygonElement | SVGEllipseElement | SVGPathElement | SVGLineElement
+  >('rect,polygon,ellipse,path,line')
+    .remove();
+  g.selectAll<SVGCircleElement>('circle').each(function () {
+    const el = this as SVGCircleElement;
+    if (!el.classList.contains('connect-port')) {
+      d3.select(el).remove();
+    }
+  });
+  const w = d.width;
+  const h = d.height;
+  const fill = d.styles.fill ?? '#f8fafc';
+  const stroke = d.styles.stroke ?? '#334155';
+  const swRaw = d.styles['stroke-width'];
+  const sw = swRaw ? Number.parseFloat(String(swRaw).replace(/px/gi, '')) || 1.5 : 1.5;
+  g.insert('rect', 'circle.connect-port')
+    .attr('x', -w / 2)
+    .attr('y', -h / 2)
+    .attr('width', w)
+    .attr('height', h)
+    .attr('fill', fill)
+    .attr('stroke', stroke)
+    .attr('stroke-width', sw);
+  const headerH = 24;
+  g.insert('rect', 'circle.connect-port')
+    .attr('x', -w / 2)
+    .attr('y', -h / 2)
+    .attr('width', w)
+    .attr('height', headerH)
+    .attr('fill', '#e2e8f0')
+    .attr('stroke', stroke)
+    .attr('stroke-width', sw);
+  g.insert('line', 'circle.connect-port')
+    .attr('x1', -w / 2)
+    .attr('x2', w / 2)
+    .attr('y1', -h / 2 + headerH)
+    .attr('y2', -h / 2 + headerH)
+    .attr('stroke', stroke)
+    .attr('stroke-width', 1);
+  let ty = -h / 2 + 16;
+  const italic = d.styles['font-style'] === 'italic';
+  if (cb.stereotype) {
+    g.insert('text', 'circle.connect-port')
+      .attr('text-anchor', 'middle')
+      .attr('y', ty)
+      .style('font-size', '10px')
+      .style('fill', '#64748b')
+      .style('font-style', italic ? 'italic' : 'normal')
+      .text(`«${cb.stereotype}»`);
+    ty += CLASS_MEMBER_LINE;
+  }
+  g.insert('text', 'circle.connect-port')
+    .attr('text-anchor', 'middle')
+    .attr('y', ty)
+    .style('font-size', '13px')
+    .style('font-weight', '600')
+    .style('fill', d.styles.color ?? '#0f172a')
+    .style('font-style', italic ? 'italic' : 'normal')
+    .text(cb.name);
+  ty = -h / 2 + headerH + 12;
+  for (const f of cb.fields) {
+    g.insert('text', 'circle.connect-port')
+      .attr('x', -w / 2 + 6)
+      .attr('y', ty)
+      .style('font-size', '11px')
+      .style('font-family', 'ui-monospace, Consolas, monospace')
+      .style('fill', '#1e293b')
+      .text(`${f.visibility}${f.name}: ${f.type}`);
+    ty += CLASS_MEMBER_LINE;
+  }
+  if (cb.fields.length && cb.methods.length) {
+    ty += 2;
+    g.insert('line', 'circle.connect-port')
+      .attr('x1', -w / 2)
+      .attr('x2', w / 2)
+      .attr('y1', ty - 4)
+      .attr('y2', ty - 4)
+      .attr('stroke', '#cbd5e1');
+  }
+  for (const m of cb.methods) {
+    const ps = m.params.map((p) => `${p.name}: ${p.type}`).join(', ');
+    const st = m.isStatic ? '$' : '';
+    const abs = m.isAbstract ? '*' : '';
+    g.insert('text', 'circle.connect-port')
+      .attr('x', -w / 2 + 6)
+      .attr('y', ty)
+      .style('font-size', '11px')
+      .style('font-family', 'ui-monospace, Consolas, monospace')
+      .style('fill', '#1e293b')
+      .text(`${m.visibility}${st}${m.name}(${ps}) ${m.returnType}${abs}`);
+    ty += CLASS_MEMBER_LINE;
+  }
+}
 
 function nodeHeightForLabel(label: string, explicitHeight?: number): number {
   if (typeof explicitHeight === 'number' && explicitHeight > 0) {
@@ -303,6 +464,23 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         .append('path')
         .attr('d', 'M0,-5L10,0L0,5')
         .attr('fill', '#4b5563');
+
+      const umlInherit = defs
+        .append('marker')
+        .attr('id', 'uml-inherit')
+        .attr('viewBox', '0 -6 12 12')
+        .attr('refX', 0)
+        .attr('refY', 0)
+        .attr('markerWidth', 10)
+        .attr('markerHeight', 10)
+        .attr('orient', 'auto');
+      umlInherit.append('path').attr('d', 'M12,-6 L0,0 L12,6 Z').attr('fill', 'none').attr('stroke', '#4b5563');
+
+      const umlComp = defs.append('marker').attr('id', 'uml-compose').attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0).attr('markerWidth', 9).attr('markerHeight', 9).attr('orient', 'auto');
+      umlComp.append('path').attr('d', 'M0,-4 L8,0 L0,4 L-8,0 Z').attr('fill', '#4b5563').attr('stroke', '#4b5563');
+
+      const umlAgg = defs.append('marker').attr('id', 'uml-aggregate').attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0).attr('markerWidth', 9).attr('markerHeight', 9).attr('orient', 'auto');
+      umlAgg.append('path').attr('d', 'M0,-4 L8,0 L0,4 L-8,0 Z').attr('fill', '#fff').attr('stroke', '#4b5563');
     }
 
     let edgesG = rootG.select<SVGGElement>('g.edges');
@@ -360,15 +538,27 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         Number.isFinite(n.x) &&
         Number.isFinite(n.y);
       const fb = fallbackLayout[n.id];
+      const isClass = n.shape === 'class_box' && n.classBox;
+      const w =
+        isClass && typeof n.width === 'number' && n.width > 0
+          ? n.width
+          : typeof n.width === 'number' && n.width > 0
+            ? n.width
+            : NODE_WIDTH;
+      const h =
+        isClass && typeof n.height === 'number' && n.height > 0
+          ? n.height
+          : nodeHeightForLabel(n.label ?? n.id, n.height);
       return {
         id: n.id,
         label: n.label ?? n.id,
-        shape: n.shape ?? 'rect',
+        shape: (n.shape ?? 'rect') as NodeShape,
         styles: n.styles ?? {},
         x: hasXY ? n.x! : (fb?.x ?? 0),
         y: hasXY ? n.y! : (fb?.y ?? 0),
-        width: typeof n.width === 'number' && n.width > 0 ? n.width : NODE_WIDTH,
-        height: nodeHeightForLabel(n.label ?? n.id, n.height),
+        width: w,
+        height: h,
+        classBox: n.classBox,
       };
     });
 
@@ -504,6 +694,44 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .attr('y', (d) => d.titleY)
       .text((d) => d.title ?? d.id);
 
+    let classNotesG = rootG.select<SVGGElement>('g.class-notes');
+    if (model.metadata.diagramType === 'class' && model.classNotes?.length) {
+      if (classNotesG.empty()) {
+        classNotesG = rootG.append('g').attr('class', 'class-notes');
+      }
+      const noteData = model.classNotes.map((n, i) => ({ ...n, i }));
+      const noteSel = classNotesG
+        .selectAll<
+          SVGGElement,
+          { text: string; targetClassId?: string; placement?: string; i: number }
+        >('g.class-note')
+        .data(noteData, (d) => String(d.i));
+      noteSel.exit().remove();
+      const ne = noteSel.enter().append('g').attr('class', 'class-note');
+      ne.append('rect');
+      ne.append('text').attr('y', 14);
+      const nm = ne.merge(noteSel);
+      nm.attr('transform', (d) => {
+        const node = d.targetClassId ? nodeById.get(d.targetClassId) : undefined;
+        if (node) {
+          return `translate(${node.x + node.width / 2 + 12},${node.y - node.height / 2})`;
+        }
+        return `translate(20,${40 + d.i * 48})`;
+      });
+      nm.select<SVGRectElement>('rect')
+        .attr('width', 220)
+        .attr('height', 36)
+        .attr('fill', '#fef9c3')
+        .attr('stroke', '#ca8a04')
+        .attr('rx', 4);
+      nm.select<SVGTextElement>('text')
+        .attr('x', 0)
+        .style('font-size', '11px')
+        .text((d) => (d.text.length > 90 ? `${d.text.slice(0, 90)}…` : d.text));
+    } else {
+      rootG.select('g.class-notes').remove();
+    }
+
     const positionedEdges: PositionedEdge[] = model.edges.map((e, edgeIndex) => {
       const from = nodeById.get(e.from);
       const to = nodeById.get(e.to);
@@ -533,6 +761,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         toW,
         toH,
         routePoints: e.points,
+        classRelation: e.classRelation,
+        fromMultiplicity: e.fromMultiplicity,
+        toMultiplicity: e.toMultiplicity,
       };
     });
 
@@ -688,9 +919,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
     edgeMerge
       .select<SVGPathElement>('path.edge-line')
-      .attr('marker-end', (d) =>
-        d.type === 'arrow' ? 'url(#edge-arrowhead)' : null,
-      )
+      .attr('marker-end', (d) => umlClassEdgePresentation(d).markerEnd)
+      .attr('marker-start', (d) => umlClassEdgePresentation(d).markerStart)
       .attr('stroke', (d) =>
         selectedEdgeIndex === d.edgeIndex
           ? '#4f46e5'
@@ -699,7 +929,10 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .attr('stroke-width', (d) =>
         edgeLineStrokeWidthPx(d.styles, selectedEdgeIndex === d.edgeIndex),
       )
-      .attr('stroke-dasharray', (d) => d.styles['stroke-dasharray'] ?? null);
+      .attr('stroke-dasharray', (d) => {
+        const u = umlClassEdgePresentation(d);
+        return u.dash ?? d.styles['stroke-dasharray'] ?? null;
+      });
 
     edgeMerge.select<SVGTextElement>('text.edge-label').text((d) => d.label ?? '');
 
@@ -773,13 +1006,24 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     nodeMerge.each(function (d) {
       const g = d3.select<SVGGElement, PositionedNode>(this);
       g.selectAll<
-        SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement,
+        SVGRectElement | SVGPolygonElement | SVGEllipseElement | SVGPathElement | SVGLineElement,
         PositionedNode
-      >('rect,polygon,circle,ellipse,path')
+      >('rect,polygon,ellipse,path,line')
         .remove();
+      g.selectAll<SVGCircleElement>('circle').each(function () {
+        const el = this as SVGCircleElement;
+        if (!el.classList.contains('connect-port')) {
+          d3.select(el).remove();
+        }
+      });
 
       const w = d.width;
       const h = d.height;
+
+      if (d.shape === 'class_box' && d.classBox) {
+        paintClassBoxNode(g, d);
+        return;
+      }
 
       if (d.shape === 'diamond') {
         g.insert('polygon', 'text')
@@ -836,7 +1080,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           .attr('ry', 6);
       }
 
-      setSvgTextMultiline(g.select<SVGTextElement>('text'), d.label);
+      if (d.shape !== 'class_box') {
+        setSvgTextMultiline(g.select<SVGTextElement>('text'), d.label);
+      }
     });
 
     nodeMerge
@@ -846,11 +1092,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     nodeMerge.attr('transform', (d) => `translate(${d.x},${d.y})`);
     nodeMerge.attr('data-node-id', (d) => d.id);
 
-    nodeMerge
-      .select<
-        SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
-      >('rect,polygon,circle,ellipse,path')
-      .attr('fill', (d) => d.styles.fill ?? '#ffffff')
+    selectNodeShapeElements(nodeMerge)
+      .attr('fill', (d) => d.styles.fill?.trim() || '#ffffff')
       .attr('stroke', (d) =>
         d.id === selectedNodeId ? '#4f46e5' : d.styles.stroke ?? '#4f46e5',
       )
@@ -946,10 +1189,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         isNodeDraggingRef.current = true;
         edgeDragDrawRef.current = 'straight';
         d3.select(svg).style('cursor', 'grabbing');
-        d3.select<SVGGElement, PositionedNode>(this)
-          .select<
-            SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
-          >('rect,polygon,circle,ellipse,path')
+        selectNodeShapeElements(d3.select<SVGGElement, PositionedNode>(this))
           .attr('opacity', 0.7)
           .attr('stroke-width', 3);
       })
@@ -987,10 +1227,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
             `translate(${d.x},${d.y})`,
           );
         }
-        d3.select<SVGGElement, PositionedNode>(this)
-          .select<
-            SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
-          >('rect,polygon,circle,ellipse,path')
+        selectNodeShapeElements(d3.select<SVGGElement, PositionedNode>(this))
           .attr('opacity', 1)
           .attr('stroke-width', (n) => nodeStrokeWidthPx(n, selectedNodeId));
         refreshAllEdgeGraphics();
@@ -1112,12 +1349,22 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         nodeG.each(function (n) {
           const g = d3.select<SVGGElement, PositionedNode>(this);
           g.selectAll<
-            SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement,
+            SVGRectElement | SVGPolygonElement | SVGEllipseElement | SVGPathElement | SVGLineElement,
             PositionedNode
-          >('rect,polygon,circle,ellipse,path')
+          >('rect,polygon,ellipse,path,line')
             .remove();
+          g.selectAll<SVGCircleElement>('circle').each(function () {
+            const el = this as SVGCircleElement;
+            if (!el.classList.contains('connect-port')) {
+              d3.select(el).remove();
+            }
+          });
           const w = n.width;
           const hh = n.height;
+          if (n.shape === 'class_box' && n.classBox) {
+            paintClassBoxNode(g, n);
+            return;
+          }
           if (n.shape === 'diamond') {
             g.insert('polygon', 'text').attr('points', `0,${-hh / 2} ${w / 2},0 0,${hh / 2} ${-w / 2},0`);
           } else if (n.shape === 'circle') {
@@ -1169,11 +1416,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
               .attr('ry', 6);
           }
         });
-        nodeG
-          .select<
-            SVGRectElement | SVGPolygonElement | SVGCircleElement | SVGEllipseElement | SVGPathElement
-          >('rect,polygon,circle,ellipse,path')
-          .attr('fill', (n) => n.styles.fill ?? '#ffffff')
+        selectNodeShapeElements(nodeG)
+          .attr('fill', (n) => n.styles.fill?.trim() || '#ffffff')
           .attr('stroke', (n) => (n.id === selectedNodeId ? '#4f46e5' : n.styles.stroke ?? '#4f46e5'))
           .attr('stroke-width', (n) => nodeStrokeWidthPx(n, selectedNodeId));
         nodeG

@@ -73,6 +73,11 @@ const initialExample = `graph TD
   B -->|Нет| D[Действие 2]`;
 const LAST_DIAGRAM_ID_STORAGE_KEY = 'hde:lastDiagramId';
 
+/** Flowchart и class: dagre в layoutService + %% layout хинты в коде. */
+function isDagreLayoutDiagramType(t: DiagramType): boolean {
+  return t === 'flowchart' || t === 'class';
+}
+
 export const EditorPage: React.FC = () => {
   const [source, setSource] = useState(initialExample);
   const [edgePickActive, setEdgePickActive] = useState(false);
@@ -103,7 +108,7 @@ export const EditorPage: React.FC = () => {
     (state) => state.diagram.selectedDiagramId,
   );
   const useAutoLayout = useAppSelector((state) => state.diagram.useAutoLayout);
-  /** Последний dagre-снимок рёбер (points + styles) для ручного режима без повторного layout. */
+  /** Последний dagre-снимок рёбер (points + styles) для ручного режима (flowchart / class). */
   const dagreEdgeCacheRef = useRef<ReturnType<typeof snapshotEdgesForLayoutCache> | null>(null);
   /** Для первого автозапуска: открыть выбранный проект сразу с последней версией. */
   const autoLoadLatestForDiagramIdRef = useRef<number | null>(null);
@@ -180,7 +185,7 @@ export const EditorPage: React.FC = () => {
   }, [currentDiagramType, source, useAutoLayout]);
 
   useEffect(() => {
-    if (currentDiagramType !== 'flowchart') {
+    if (!isDagreLayoutDiagramType(currentDiagramType)) {
       dagreEdgeCacheRef.current = null;
       return;
     }
@@ -192,7 +197,7 @@ export const EditorPage: React.FC = () => {
 
   const diagramModel = useMemo(() => {
     if (parsed.error || !parsed.model) return null;
-    if (currentDiagramType !== 'flowchart') return parsed.model;
+    if (!isDagreLayoutDiagramType(currentDiagramType)) return parsed.model;
     const model = parsed.model;
     if (!useAutoLayout && dagreEdgeCacheRef.current?.length) {
       mergeEdgeLayoutFromCache(model, dagreEdgeCacheRef.current);
@@ -683,11 +688,11 @@ export const EditorPage: React.FC = () => {
   };
 
   const layoutHintsInSource =
-    currentDiagramType === 'flowchart' && sourceHasLayoutPositionHints(source);
+    isDagreLayoutDiagramType(currentDiagramType) && sourceHasLayoutPositionHints(source);
 
   const handleRestoreAutoLayout = (): void => {
-    if (currentDiagramType !== 'flowchart') {
-      setStatusMessage('Автораскладка доступна только для flowchart');
+    if (!isDagreLayoutDiagramType(currentDiagramType)) {
+      setStatusMessage('Автораскладка с пересчётом dagre доступна для flowchart и class');
       return;
     }
     dispatch(enableAutoLayout());
@@ -1054,7 +1059,7 @@ export const EditorPage: React.FC = () => {
                   setStatusMessage(`Связь: ${e.from} → ${newTo}`);
                 }}
                 onNodePositionChange={(id, x, y, size) => {
-                  if (currentDiagramType === 'flowchart') {
+                  if (isDagreLayoutDiagramType(currentDiagramType)) {
                     if (diagramModel) {
                       dagreEdgeCacheRef.current = snapshotEdgesForLayoutCache(diagramModel);
                     }

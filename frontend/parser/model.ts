@@ -13,16 +13,63 @@ import type {
   SubgraphBlockAst,
 } from './ast';
 
+/** Узел блок-схемы или «коробка класса» для classDiagram. */
+export type DiagramNodeShape = NodeShape | 'class_box';
+
+export type ClassVisibility = '+' | '-' | '#' | '~';
+
+export interface ClassFieldModel {
+  name: string;
+  type: string;
+  visibility: ClassVisibility;
+  isStatic?: boolean;
+}
+
+export interface ClassMethodModel {
+  name: string;
+  params: { name: string; type: string }[];
+  returnType: string;
+  visibility: ClassVisibility;
+  isAbstract?: boolean;
+  isStatic?: boolean;
+}
+
+/** Данные UML-блока (поля/методы) для classDiagram. */
+export interface ClassBoxModel {
+  id: string;
+  name: string;
+  stereotype?: string;
+  fields: ClassFieldModel[];
+  methods: ClassMethodModel[];
+}
+
+export type ClassRelationKind =
+  | 'inheritance'
+  | 'implementation'
+  | 'composition'
+  | 'aggregation'
+  | 'association'
+  | 'bidirectional'
+  | 'dependency';
+
+export interface ClassNoteModel {
+  text: string;
+  targetClassId?: string;
+  placement?: 'left' | 'right' | 'float';
+}
+
 export interface DiagramNodeModel {
   id: string;
   label: string;
-  shape: NodeShape;
+  shape: DiagramNodeShape;
   styles: Record<string, string>;
   x?: number;
   y?: number;
   /** Override размера узла на холсте (из layout-хинта или UI). */
   width?: number;
   height?: number;
+  /** Для `shape === 'class_box'`: содержимое класса. */
+  classBox?: ClassBoxModel;
 }
 
 export type EdgeType = 'arrow' | 'line';
@@ -40,6 +87,10 @@ export interface DiagramEdgeModel {
   styles: Record<string, string>;
   /** Ортогональный маршрут из dagre (если есть); при ручном layout из подсказки не задаётся. */
   points?: DiagramEdgePoint[];
+  /** classDiagram: тип связи UML. */
+  classRelation?: ClassRelationKind;
+  fromMultiplicity?: string;
+  toMultiplicity?: string;
 }
 
 /** Подграф для рамки на холсте (узлы — транзитивно из тела и вложенных subgraph). */
@@ -70,6 +121,8 @@ export interface DiagramModel {
   nodeSubgraphById?: Record<string, string>;
   /** Родитель подграфа: id → id родителя или null. */
   subgraphParentById?: Record<string, string | null>;
+  /** Заметки classDiagram. */
+  classNotes?: ClassNoteModel[];
 }
 
 function collectNodeIdsFromBody(body: StatementAst[]): string[] {

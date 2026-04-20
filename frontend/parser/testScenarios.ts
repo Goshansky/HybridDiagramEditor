@@ -1,4 +1,4 @@
-import { parseMermaidFlowchart } from './index';
+import { parseMermaidByType, parseMermaidFlowchart } from './index';
 import { upsertLayoutHint } from './layoutHintSync';
 
 function assert(condition: unknown, message: string): void {
@@ -151,5 +151,25 @@ flowchart TD
 `.trim();
   const mTb = parseMermaidFlowchart(dirTb);
   assert(mTb.subgraphs?.find((s) => s.id === 'S1')?.direction === 'TD', 'direction TB → TD');
+
+  const cls = `
+classDiagram
+  class Animal {
+    +name: string
+  }
+  class Dog {
+    +bark() void
+  }
+  Animal <|-- Dog
+  Dog ..> Animal : dep
+`.trim();
+  const cm = parseMermaidByType(cls, 'class', true);
+  assert(cm.metadata.diagramType === 'class', 'class diagram type');
+  assert(cm.nodes.length >= 2, 'classes as nodes');
+  const dog = cm.nodes.find((n) => n.id === 'Dog');
+  assert(dog?.shape === 'class_box' && dog.classBox?.methods.some((m) => m.name === 'bark'), 'Dog methods');
+  assert(cm.edges.length >= 2, 'relations');
+  assert(cm.edges.some((e) => e.classRelation === 'inheritance'), 'inheritance');
+  assert(cm.edges.some((e) => e.classRelation === 'dependency'), 'dependency');
 }
 
