@@ -1,27 +1,39 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
-import { FileUp, RefreshCw, Save } from 'lucide-react';
+import { Copy, FileUp, GitBranch, Image, RefreshCw, Save } from 'lucide-react';
+import type { DiagramType } from '../services/diagramApi';
 
 interface CodeEditorProps {
   value: string;
   onChange: (value: string) => void;
+  diagramType: DiagramType;
+  onDiagramTypeChange: (type: DiagramType) => void;
   onOpenFile: () => void;
   onSaveCode: () => void;
-  onGenerateFromCanvas?: () => void;
+  onCopyCode: () => void;
+  onSaveVersion: () => void;
+  onDownloadSvg: () => void;
+  onDownloadPng: () => void;
+  canSaveVersion: boolean;
   isSynced?: boolean;
 }
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({
   value,
   onChange,
+  diagramType,
+  onDiagramTypeChange,
   onOpenFile,
   onSaveCode,
-  onGenerateFromCanvas,
+  onCopyCode,
+  onSaveVersion,
+  onDownloadSvg,
+  onDownloadPng,
+  canSaveVersion,
   isSynced = false,
 }) => {
-  const [language, setLanguage] = useState<'mermaid' | 'plantuml'>('mermaid');
   const rootRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorView | null>(null);
@@ -138,38 +150,39 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         style={{
           background: '#ffffff',
           borderBottom: '1px solid #e5e7eb',
-          padding: '8px 16px',
+          padding: '10px 16px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          gap: 12,
         }}
       >
         <span style={{ fontSize: '14px', fontWeight: 500, color: '#374151' }}>Редактор кода</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button title="Открыть файл" onClick={onOpenFile} style={headerIconButtonStyle}>
+            <FileUp size={16} color="#4b5563" />
+          </button>
+          <button title="Сохранить текст" onClick={onSaveCode} style={headerIconButtonStyle}>
+            <Save size={16} color="#4b5563" />
+          </button>
           <select
-            value={language}
-            onChange={(event) => setLanguage(event.target.value as 'mermaid' | 'plantuml')}
+            value={diagramType}
+            onChange={(event) => onDiagramTypeChange(event.target.value as DiagramType)}
             style={{
-              padding: '4px 8px',
+              minWidth: 180,
+              padding: '7px 10px',
               background: '#ffffff',
               border: '1px solid #d1d5db',
-              borderRadius: '4px',
-              fontSize: '12px',
+              borderRadius: 8,
+              fontSize: 13,
               color: '#111827',
             }}
           >
-            <option value="mermaid">Mermaid</option>
-            <option value="plantuml">PlantUML</option>
+            <option value="flowchart">Блок-схема</option>
+            <option value="class">Диаграмма классов</option>
+            <option value="sequence">Диаграмма последовательности</option>
+            <option value="er">ER-диаграмма</option>
           </select>
-          <button title="Открыть файл" onClick={onOpenFile} style={iconButtonStyle}>
-            <FileUp size={16} color="#4b5563" />
-          </button>
-          <button title="Сохранить код" onClick={onSaveCode} style={iconButtonStyle}>
-            <Save size={16} color="#4b5563" />
-          </button>
-          <button title="Генерировать из холста" onClick={onGenerateFromCanvas} style={iconButtonStyle}>
-            <RefreshCw size={16} color="#4b5563" />
-          </button>
         </div>
       </div>
 
@@ -221,6 +234,19 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                 {isSynced ? 'Синхронизировано' : 'Синхронизация...'}
               </span>
             </div>
+            <button
+              onClick={onCopyCode}
+              title="Скопировать код"
+              style={{
+                ...headerIconButtonStyle,
+                color: '#cbd5e1',
+                border: '1px solid #334155',
+                background: '#111827',
+              }}
+            >
+              <Copy size={14} />
+              <span style={{ fontSize: 11 }}>Скопировать</span>
+            </button>
           </div>
         </div>
 
@@ -240,7 +266,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         style={{
           background: '#ffffff',
           borderTop: '1px solid #e5e7eb',
-          padding: '8px 16px',
+          padding: '8px 16px 10px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -257,6 +283,40 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           <div style={{ width: '8px', height: '8px', borderRadius: '9999px', background: '#22c55e' }} />
           <span>Автосинхронизация: Код ↔ Диаграмма</span>
         </div>
+      </div>
+      <div
+        style={{
+          background: '#ffffff',
+          borderTop: '1px solid #e5e7eb',
+          padding: '10px 16px 12px',
+          display: 'flex',
+          gap: 8,
+        }}
+      >
+        <button
+          onClick={onSaveVersion}
+          disabled={!canSaveVersion}
+          style={{
+            ...actionButtonBaseStyle,
+            background: '#6f42c1',
+            borderColor: '#6f42c1',
+            color: '#fff',
+            opacity: canSaveVersion ? 1 : 0.6,
+            cursor: canSaveVersion ? 'pointer' : 'not-allowed',
+          }}
+          title={canSaveVersion ? 'Сохранить версию' : 'Сначала выбери диаграмму'}
+        >
+          <GitBranch size={15} />
+          <span>Сохранить версию</span>
+        </button>
+        <button onClick={onDownloadSvg} style={actionButtonBaseStyle}>
+          <Image size={15} />
+          <span>Скачать SVG</span>
+        </button>
+        <button onClick={onDownloadPng} style={actionButtonBaseStyle}>
+          <Image size={15} />
+          <span>Скачать PNG</span>
+        </button>
       </div>
 
       <style>{`
@@ -287,13 +347,31 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   );
 };
 
-const iconButtonStyle: React.CSSProperties = {
+const actionButtonBaseStyle: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: '6px',
-  borderRadius: '6px',
-  border: 'none',
-  background: 'transparent',
+  gap: 6,
+  padding: '8px 10px',
+  borderRadius: 8,
+  border: '1px solid #d1d5db',
+  background: '#ffffff',
+  color: '#374151',
+  cursor: 'pointer',
+  fontSize: 13,
+  fontWeight: 500,
+};
+
+const headerIconButtonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  padding: '6px 8px',
+  borderRadius: 8,
+  border: '1px solid #d1d5db',
+  background: '#ffffff',
   cursor: 'pointer',
 };

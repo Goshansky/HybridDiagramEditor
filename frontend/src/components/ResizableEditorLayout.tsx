@@ -20,7 +20,7 @@ const handleGripStyle: React.CSSProperties = {
 };
 
 export interface ResizableEditorLayoutProps {
-  sidebar: React.ReactNode;
+  sidebar?: React.ReactNode | null;
   code: React.ReactNode;
   canvas: React.ReactNode;
   /** Если null — правая колонка не рендерится. */
@@ -35,31 +35,40 @@ export const ResizableEditorLayout: React.FC<ResizableEditorLayoutProps> = ({
   properties,
   sidebarPanelRef,
 }) => {
+  const showSidebar = sidebar != null;
   const showProperties = properties != null;
 
   return (
     <Group
-      id={showProperties ? 'hde-editor-panels-4' : 'hde-editor-panels-3'}
+      id={
+        showSidebar
+          ? (showProperties ? 'hde-editor-panels-4' : 'hde-editor-panels-3')
+          : (showProperties ? 'hde-editor-panels-3-nosidebar' : 'hde-editor-panels-2')
+      }
       orientation="horizontal"
       style={{ flex: 1, minHeight: 0, width: '100%' }}
     >
-      <Panel
-        id="sidebar"
-        panelRef={sidebarPanelRef}
-        collapsible
-        collapsedSize="48px"
-        defaultSize={showProperties ? '16%' : '18%'}
-        minSize="11%"
-        style={{ minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-      >
-        {sidebar}
-      </Panel>
-      <Separator style={handleStyle}>
-        <span style={handleGripStyle} />
-      </Separator>
+      {showSidebar ? (
+        <>
+          <Panel
+            id="sidebar"
+            panelRef={sidebarPanelRef}
+            collapsible
+            collapsedSize="48px"
+            defaultSize={showProperties ? '16%' : '18%'}
+            minSize="11%"
+            style={{ minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          >
+            {sidebar}
+          </Panel>
+          <Separator style={handleStyle}>
+            <span style={handleGripStyle} />
+          </Separator>
+        </>
+      ) : null}
       <Panel
         id="code"
-        defaultSize={showProperties ? '28%' : '32%'}
+        defaultSize={showSidebar ? (showProperties ? '28%' : '32%') : (showProperties ? '42%' : '45%')}
         minSize="14%"
         style={{ minWidth: 200, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       >

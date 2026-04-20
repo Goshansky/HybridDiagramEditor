@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { usePanelRef } from 'react-resizable-panels';
 import axios from 'axios';
 import {
   BookOpen,
@@ -36,7 +35,6 @@ import { EdgeEditor } from '../components/EdgeEditor';
 import { NodeEditor } from '../components/NodeEditor';
 import { PropertiesPanel } from '../components/PropertiesPanel';
 import { ResizableEditorLayout } from '../components/ResizableEditorLayout';
-import { SidePanel } from '../components/SidePanel';
 import { useAppDispatch, useAppSelector } from '../store';
 import { setAuthUser } from '../store/authSlice';
 import {
@@ -77,8 +75,6 @@ const LAST_DIAGRAM_ID_STORAGE_KEY = 'hde:lastDiagramId';
 export const EditorPage: React.FC = () => {
   const [source, setSource] = useState(initialExample);
   const [edgePickActive, setEdgePickActive] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const sidebarPanelRef = usePanelRef();
   const [zoomNonce, setZoomNonce] = useState(0);
   const [zoomType, setZoomType] = useState<'in' | 'out' | 'reset'>('reset');
   const [zoomPercent, setZoomPercent] = useState(100);
@@ -683,9 +679,7 @@ export const EditorPage: React.FC = () => {
 
   const handleOpenFile: React.ChangeEventHandler<HTMLInputElement> = async (event) => {
     const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
+    if (!file) return;
     const text = await file.text();
     setSource(text);
     dispatch(enableAutoLayout());
@@ -901,45 +895,33 @@ export const EditorPage: React.FC = () => {
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <ResizableEditorLayout
-          sidebarPanelRef={sidebarPanelRef}
-          sidebar={
-            <SidePanel
-              collapsed={sidebarCollapsed}
-              onCollapseSidebar={() => {
-                sidebarPanelRef.current?.collapse();
-                setSidebarCollapsed(true);
-              }}
-              onExpandSidebar={() => {
-                sidebarPanelRef.current?.expand();
-                setSidebarCollapsed(false);
-              }}
-              diagramType={currentDiagramType}
-              onDiagramTypeChange={handleSelectDiagramType}
-              onSaveSvg={saveAsSvg}
-              onSaveImage={() => {
-                void saveAsPng();
-              }}
-              onSaveVersion={() => {
-                void saveVersionToServer();
-              }}
-              onRestore={() => {
-                void restoreFromServer();
-              }}
-              isSyncing
-            />
-          }
           code={
             <CodeEditor
               value={source}
               onChange={handleCodeEditorChange}
+              diagramType={currentDiagramType}
+              onDiagramTypeChange={handleSelectDiagramType}
               onOpenFile={openFile}
               onSaveCode={() => {
                 downloadTextFile('diagram.mmd', source);
-                setStatusMessage('Код сохранен');
+                setStatusMessage('Текст сохранен');
               }}
-              onGenerateFromCanvas={() => {
-                setStatusMessage('Генерация кода из холста будет добавлена отдельно');
+              onCopyCode={async () => {
+                try {
+                  await navigator.clipboard.writeText(source);
+                  setStatusMessage('Код скопирован в буфер обмена');
+                } catch {
+                  setStatusMessage('Не удалось скопировать код');
+                }
               }}
+              onSaveVersion={() => {
+                void saveVersionToServer();
+              }}
+              onDownloadSvg={saveAsSvg}
+              onDownloadPng={() => {
+                void saveAsPng();
+              }}
+              canSaveVersion={selectedDiagramId !== null}
               isSynced
             />
           }
