@@ -43,8 +43,13 @@ export const Dashboard: React.FC = () => {
     <div className={styles.page}>
       <header className={styles.header}>
         <Link to="/" className={styles.brandLink}>
-          <span className={styles.brandHex} />
+          <span className={styles.brandBadge}>
+            <span className={styles.brandHex} />
+          </span>
           <span className={styles.brand}>HDE</span>
+        </Link>
+        <Link to="/" className={styles.editorButton}>
+          Редактор
         </Link>
       </header>
 
