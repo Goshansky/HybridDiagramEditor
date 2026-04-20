@@ -125,7 +125,7 @@ function parseMemberLine(
   };
 }
 
-function parseParams(s: string): { name: string; type: string }[] {
+export function parseParams(s: string): { name: string; type: string }[] {
   const t = s.trim();
   if (!t) return [];
   const parts = t.split(',').map((x) => x.trim()).filter(Boolean);

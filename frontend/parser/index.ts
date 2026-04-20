@@ -37,7 +37,9 @@ export {
   upsertEdgeStyleInHint,
   type LayoutDocument,
 } from './layoutHintSync';
-export { generateMermaidFromModel } from './generateMermaid';
+export { generateMermaidFromModel, buildHintDocumentFromModel } from './generateMermaid';
+export { generateClassDiagramMermaid, serializeClassEdgeLine } from './generateClassDiagramMermaid';
+export { parseParams, estimateClassBoxSize } from './classDiagram';
 export * from './flowchartSync';
 
 export function parseMermaidFlowchart(

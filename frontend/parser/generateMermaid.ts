@@ -15,7 +15,11 @@ function formatNodeStyle(styles: Record<string, string>): string | null {
   return raw || null;
 }
 
-function buildHintDocumentFromModel(model: DiagramModel, source: string): Record<string, unknown> {
+/** Экспорт для generateClassDiagramMermaid и др.: layout + edgeStyles в JSON-хинте. */
+export function buildHintDocumentFromModel(
+  model: DiagramModel,
+  source: string,
+): Record<string, unknown> {
   const prev = getLayoutHintDocument(source) ?? {};
   const prevLayout =
     typeof prev.layout === 'object' && prev.layout !== null

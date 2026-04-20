@@ -11,6 +11,7 @@ import {
   upsertNodeStyleLine,
   type FlowNodeShape,
 } from '../../parser';
+import { ClassDiagramPropertiesPanel } from './ClassDiagramPropertiesPanel';
 import { useAppDispatch, useAppSelector } from '../store';
 import {
   clearSelectedElement,
@@ -84,7 +85,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const selectedEdgeIndex = useAppSelector((s) => getSelectedEdgeIndexFromState(s.ui));
   const selectionType = useAppSelector((s) => s.ui.selectedElementType);
 
-  if (diagramType !== 'flowchart') {
+  if (diagramType !== 'flowchart' && diagramType !== 'class') {
     return (
       <aside style={panelOuter}>
         <div style={panelHeader}>
@@ -103,6 +104,18 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         </div>
         <p style={muted}>Ничего не выбрано. Кликни по узлу или связи на холсте.</p>
       </aside>
+    );
+  }
+
+  if (diagramType === 'class') {
+    return (
+      <ClassDiagramPropertiesPanel
+        model={model}
+        source={source}
+        onSourceChange={onSourceChange}
+        selectedNodeId={selectedNodeId}
+        selectedEdgeIndex={selectedEdgeIndex}
+      />
     );
   }
 
