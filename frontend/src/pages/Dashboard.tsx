@@ -6,6 +6,7 @@ import { logout } from '../store/authSlice';
 import { useAppDispatch } from '../store';
 import { DashboardProfilePanel } from './DashboardProfilePanel';
 import { DashboardProjectsPanel } from './DashboardProjectsPanel';
+import { Documentation } from './Documentation';
 import styles from './Dashboard.module.css';
 
 type DashboardTab = 'profile' | 'projects' | 'docs';
@@ -103,28 +104,3 @@ const SidebarButton: React.FC<{ active: boolean; onClick: () => void; label: str
   </button>
 );
 
-const Documentation: React.FC = () => (
-  <div>
-    <h2 className={styles.sectionTitle}>Документация</h2>
-    <p className={styles.paragraph}>
-      Приложение поддерживает создание и редактирование диаграмм в синтаксисе Mermaid с живой
-      визуализацией и двусторонней синхронизацией кода и холста.
-    </p>
-    <ul className={styles.list}>
-      <li>Типы диаграмм: flowchart, class, sequence, er.</li>
-      <li>
-        Поддержка <code>subgraph</code>, стилей узлов и рёбер, меток связей, пунктирных линий{' '}
-        <code>{'-.->'}</code>, shape-маркеров.
-      </li>
-      <li>
-        Layout-хинты в комментариях (<code>{'%% {"layout": {...}}'}</code>) для хранения ручных координат и размеров.
-      </li>
-      <li>Версионирование диаграмм: история изменений и загрузка предыдущих ревизий.</li>
-      <li>Экспорт через инструменты редактора и управление проектами из вкладки "Мои проекты".</li>
-      <li>JWT-аутентификация, личный кабинет, смена пароля и защищённые маршруты.</li>
-    </ul>
-    <p className={styles.paragraph} style={{ marginTop: 16 }}>
-      Быстрый старт: откройте "Мои проекты", выберите диаграмму или создайте новую, затем перейдите в "Редактор".
-    </p>
-  </div>
-);
