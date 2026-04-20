@@ -23,7 +23,7 @@ export function buildHintDocumentFromModel(
   const prev = getLayoutHintDocument(source) ?? {};
   const prevLayout =
     typeof prev.layout === 'object' && prev.layout !== null
-      ? (prev.layout as Record<string, unknown>)
+      ? (prev.layout as unknown as Record<string, unknown>)
       : {};
   const layout: Record<string, unknown> = { ...prevLayout };
   for (const n of model.nodes) {

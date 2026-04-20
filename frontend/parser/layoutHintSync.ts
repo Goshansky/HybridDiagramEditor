@@ -72,7 +72,7 @@ export function sourceHasLayoutPositionHints(source: string): boolean {
   if (!layout || typeof layout !== 'object') return false;
   return Object.values(layout).some((p) => {
     if (!p || typeof p !== 'object') return false;
-    const o = p as Record<string, unknown>;
+    const o = p as unknown as Record<string, unknown>;
     return typeof o.x === 'number' && typeof o.y === 'number';
   });
 }
