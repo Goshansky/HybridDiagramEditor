@@ -1030,6 +1030,7 @@ export const EditorPage: React.FC = () => {
               value={source}
               onChange={handleCodeEditorChange}
               diagramType={activeDiagramType}
+              theme={theme}
               onOpenFile={openFile}
               onSaveCode={() => {
                 downloadTextFile('diagram.mmd', source);

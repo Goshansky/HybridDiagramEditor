@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
-import { markdown } from '@codemirror/lang-markdown';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
+import { mermaid } from 'codemirror-lang-mermaid';
 import { Copy, FileUp, GitBranch, Image, RefreshCw, Save } from 'lucide-react';
 import type { DiagramType } from '../services/diagramApi';
 
@@ -17,6 +19,7 @@ interface CodeEditorProps {
   onDownloadPng: () => void;
   canSaveVersion: boolean;
   isSynced?: boolean;
+  theme: 'light' | 'dark';
 }
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -31,6 +34,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   onDownloadPng,
   canSaveVersion,
   isSynced = false,
+  theme,
 }) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,6 +50,32 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     return { lines, chars: value.length };
   }, [value]);
 
+  const syntaxStyle = useMemo(
+    () =>
+      HighlightStyle.define(
+        theme === 'dark'
+          ? [
+              { tag: tags.keyword, color: '#c084fc', fontWeight: '600' },
+              { tag: tags.string, color: '#86efac' },
+              { tag: tags.number, color: '#fca5a5' },
+              { tag: tags.comment, color: '#94a3b8', fontStyle: 'italic' },
+              { tag: tags.typeName, color: '#60a5fa' },
+              { tag: tags.variableName, color: '#e2e8f0' },
+              { tag: tags.operator, color: '#fbbf24' },
+            ]
+          : [
+              { tag: tags.keyword, color: '#7c3aed', fontWeight: '600' },
+              { tag: tags.string, color: '#047857' },
+              { tag: tags.number, color: '#b91c1c' },
+              { tag: tags.comment, color: '#6b7280', fontStyle: 'italic' },
+              { tag: tags.typeName, color: '#1d4ed8' },
+              { tag: tags.variableName, color: '#111827' },
+              { tag: tags.operator, color: '#b45309' },
+            ],
+      ),
+    [theme],
+  );
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -53,7 +83,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       doc: value,
       extensions: [
         basicSetup,
-        markdown(),
+        mermaid(),
+        syntaxHighlighting(syntaxStyle),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             onChangeRef.current(update.state.doc.toString());
@@ -61,40 +92,40 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         }),
         EditorView.theme({
           '.cm-editor': {
-            backgroundColor: '#111827',
-            color: '#f3f4f6',
+            backgroundColor: theme === 'dark' ? '#111827' : '#ffffff',
+            color: theme === 'dark' ? '#f3f4f6' : '#111827',
             fontSize: '14px',
             fontFamily:
               'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
           },
           '.cm-gutters': {
-            backgroundColor: '#1f2937',
-            borderRight: '1px solid #374151',
-            color: '#6b7280',
+            backgroundColor: theme === 'dark' ? '#1f2937' : '#f9fafb',
+            borderRight: theme === 'dark' ? '1px solid #374151' : '1px solid #e5e7eb',
+            color: theme === 'dark' ? '#6b7280' : '#9ca3af',
           },
           '.cm-activeLineGutter': {
-            backgroundColor: '#111827',
+            backgroundColor: theme === 'dark' ? '#111827' : '#f3f4f6',
           },
           '.cm-cursor': {
-            borderLeftColor: '#60a5fa',
+            borderLeftColor: theme === 'dark' ? '#60a5fa' : '#2563eb',
           },
           '.cm-selectionBackground': {
-            backgroundColor: '#1e40af',
+            backgroundColor: theme === 'dark' ? '#1e40af' : '#bfdbfe',
           },
           '&.cm-focused .cm-selectionBackground': {
-            backgroundColor: '#1e40af',
+            backgroundColor: theme === 'dark' ? '#1e40af' : '#bfdbfe',
           },
           '.cm-lineNumbers .cm-gutterMarker': {
-            color: '#6b7280',
+            color: theme === 'dark' ? '#6b7280' : '#9ca3af',
           },
           '.cm-content': {
-            caretColor: '#60a5fa',
-            color: '#e5e7eb',
+            caretColor: theme === 'dark' ? '#60a5fa' : '#2563eb',
+            color: theme === 'dark' ? '#e5e7eb' : '#111827',
           },
           '.cm-line': {
             padding: '0 0 0 8px',
           },
-        }, { dark: true }),
+        }, { dark: theme === 'dark' }),
       ],
     });
 
@@ -108,7 +139,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     return () => {
       editor.destroy();
     };
-  }, []);
+  }, [theme, syntaxStyle]);
 
   // Update editor content when value prop changes (external updates)
   useEffect(() => {
@@ -194,7 +225,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       >
         <div
           style={{
-            backgroundColor: '#111827',
+            backgroundColor: theme === 'dark' ? '#111827' : '#ffffff',
             borderRadius: '8px',
             boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
             overflow: 'hidden',
@@ -206,10 +237,10 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         {/* Header */}
         <div
           style={{
-            backgroundColor: '#1f2937',
+            backgroundColor: theme === 'dark' ? '#1f2937' : '#f9fafb',
             padding: '8px 16px',
             fontSize: '12px',
-            color: '#9ca3af',
+            color: theme === 'dark' ? '#9ca3af' : '#6b7280',
             fontFamily:
               'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
             display: 'flex',
@@ -234,9 +265,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
               title="Скопировать код"
               style={{
                 ...headerIconButtonStyle,
-                color: '#cbd5e1',
-                border: '1px solid #334155',
-                background: '#111827',
+                color: theme === 'dark' ? '#cbd5e1' : '#374151',
+                border: theme === 'dark' ? '1px solid #334155' : '1px solid #d1d5db',
+                background: theme === 'dark' ? '#111827' : '#ffffff',
               }}
             >
               <Copy size={14} />
