@@ -644,7 +644,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .attr('x', -2000)
       .attr('y', -2000)
       .attr('width', 4000)
-      .attr('height', 4000);
+      .attr('height', 4000)
+      .style('display', gridSnap ? null : 'none');
 
     let panHitRect = rootG.select<SVGRectElement>('rect.canvas-pan-hit');
     if (panHitRect.empty()) {
