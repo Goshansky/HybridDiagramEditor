@@ -433,28 +433,118 @@ function dedupePolylinePoints(pts: { x: number; y: number }[]): { x: number; y: 
   return out.length > 0 ? out : pts;
 }
 
-/**
- * Позиция текста кардинальности у конца сегмента: смещение по нормали к ребру,
- * на сторону «наружу» от центра узла (чтобы не висело в середине длинного сегмента).
- */
+/** Позиция кардинальности: отступ вдоль ребра + небольшой отступ по нормали "наружу" от узла. */
 function erCardinalityLabelPos(
   nodeCenter: { x: number; y: number },
   anchor: { x: number; y: number },
-  segDx: number,
-  segDy: number,
-  offset: number,
+  toward: { x: number; y: number },
+  alongOffset: number,
+  normalOffset: number,
 ): { x: number; y: number } {
-  const len = Math.hypot(segDx, segDy);
+  const dx = toward.x - anchor.x;
+  const dy = toward.y - anchor.y;
+  const len = Math.hypot(dx, dy);
   if (len < 1e-6) return { x: anchor.x, y: anchor.y };
-  let nx = -segDy / len;
-  let ny = segDx / len;
+  const ux = dx / len;
+  const uy = dy / len;
+  let nx = -uy;
+  let ny = ux;
   const ox = anchor.x - nodeCenter.x;
   const oy = anchor.y - nodeCenter.y;
   if (nx * ox + ny * oy < 0) {
     nx = -nx;
     ny = -ny;
   }
-  return { x: anchor.x + nx * offset, y: anchor.y + ny * offset };
+  return {
+    x: anchor.x + ux * alongOffset + nx * normalOffset,
+    y: anchor.y + uy * alongOffset + ny * normalOffset,
+  };
+}
+
+function drawErCardinalityGlyph(
+  host: d3.Selection<SVGGElement, unknown, null, undefined>,
+  card: string,
+  anchor: { x: number; y: number },
+  toward: { x: number; y: number },
+  color: string,
+): void {
+  host.selectAll('*').remove();
+  const dx = toward.x - anchor.x;
+  const dy = toward.y - anchor.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) return;
+  const ux = dx / len;
+  const uy = dy / len;
+  const nx = -uy;
+  const ny = ux;
+  const token = (card ?? '').trim();
+  if (!token) return;
+  const symbols = token.split('').reverse();
+  const step = 8;
+  const start = 5;
+  const stroke = color;
+
+  const drawOne = (off: number): void => {
+    const cx = anchor.x + ux * off;
+    const cy = anchor.y + uy * off;
+    host
+      .append('line')
+      .attr('x1', cx + nx * 6)
+      .attr('y1', cy + ny * 6)
+      .attr('x2', cx - nx * 6)
+      .attr('y2', cy - ny * 6)
+      .attr('stroke', stroke)
+      .attr('stroke-width', 1.8);
+  };
+  const drawZero = (off: number): void => {
+    const cx = anchor.x + ux * off;
+    const cy = anchor.y + uy * off;
+    host
+      .append('circle')
+      .attr('cx', cx)
+      .attr('cy', cy)
+      .attr('r', 5.2)
+      .attr('fill', '#f3f4f6')
+      .attr('stroke', stroke)
+      .attr('stroke-width', 1.8);
+  };
+  const drawMany = (off: number): void => {
+    const tx = anchor.x + ux * off;
+    const ty = anchor.y + uy * off;
+    const bx = tx + ux * 8;
+    const by = ty + uy * 8;
+    host
+      .append('line')
+      .attr('x1', bx)
+      .attr('y1', by)
+      .attr('x2', tx + nx * 6)
+      .attr('y2', ty + ny * 6)
+      .attr('stroke', stroke)
+      .attr('stroke-width', 1.8);
+    host
+      .append('line')
+      .attr('x1', bx)
+      .attr('y1', by)
+      .attr('x2', tx - nx * 6)
+      .attr('y2', ty - ny * 6)
+      .attr('stroke', stroke)
+      .attr('stroke-width', 1.8);
+    host
+      .append('line')
+      .attr('x1', bx)
+      .attr('y1', by)
+      .attr('x2', tx)
+      .attr('y2', ty)
+      .attr('stroke', stroke)
+      .attr('stroke-width', 1.8);
+  };
+
+  symbols.forEach((s, idx) => {
+    const off = start + idx * step;
+    if (s === '|') drawOne(off);
+    else if (s === 'o') drawZero(off);
+    else if (s === '{' || s === '}') drawMany(off);
+  });
 }
 
 export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
@@ -1029,6 +1119,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .style('font-weight', '600')
       .style('fill', '#475569')
       .style('pointer-events', 'none');
+    edgeEnter.append('g').attr('class', 'er-card-l').style('pointer-events', 'none');
+    edgeEnter.append('g').attr('class', 'er-card-r').style('pointer-events', 'none');
 
     const edgeMerge = edgeEnter.merge(edgeSelection);
     edgeMerge.each(function ensureEdgePaths(this: SVGGElement) {
@@ -1095,6 +1187,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         if (!er) {
           g.select<SVGTextElement>('text.er-edge-l').attr('opacity', 0);
           g.select<SVGTextElement>('text.er-edge-r').attr('opacity', 0);
+          g.select<SVGGElement>('g.er-card-l').selectAll('*').remove();
+          g.select<SVGGElement>('g.er-card-r').selectAll('*').remove();
         }
 
         if (seq) {
@@ -1140,7 +1234,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           }
           setD(pts);
 
-          const CARD_OFF = 13;
+          const CARD_ALONG = 14;
+          const CARD_NORMAL = 10;
           const mid = pts[Math.floor(pts.length / 2)] ?? pts[0]!;
           let labelX = mid.x;
           let labelY = mid.y - 8;
@@ -1170,16 +1265,20 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
               const pos = erCardinalityLabelPos(
                 { x: from.x, y: from.y },
                 p0,
-                p1.x - p0.x,
-                p1.y - p0.y,
-                CARD_OFF,
+                p1,
+                CARD_ALONG,
+                CARD_NORMAL,
               );
+              const cardL = g.select<SVGGElement>('g.er-card-l');
+              drawErCardinalityGlyph(cardL, d.erLeftCard, p0, p1, d.styles.stroke ?? '#475569');
               g.select<SVGTextElement>('text.er-edge-l')
                 .attr('opacity', 1)
                 .attr('x', pos.x)
                 .attr('y', pos.y)
                 .style('font-family', 'ui-monospace, Consolas, monospace')
-                .text(d.erLeftCard);
+                .text('');
+            } else {
+              g.select<SVGGElement>('g.er-card-l').selectAll('*').remove();
             }
             const pn = pts[pts.length - 1]!;
             const pm = pts[pts.length - 2]!;
@@ -1187,16 +1286,20 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
               const pos = erCardinalityLabelPos(
                 { x: to.x, y: to.y },
                 pn,
-                pn.x - pm.x,
-                pn.y - pm.y,
-                CARD_OFF,
+                pm,
+                CARD_ALONG,
+                CARD_NORMAL,
               );
+              const cardR = g.select<SVGGElement>('g.er-card-r');
+              drawErCardinalityGlyph(cardR, d.erRightCard, pn, pm, d.styles.stroke ?? '#475569');
               g.select<SVGTextElement>('text.er-edge-r')
                 .attr('opacity', 1)
                 .attr('x', pos.x)
                 .attr('y', pos.y)
                 .style('font-family', 'ui-monospace, Consolas, monospace')
-                .text(d.erRightCard);
+                .text('');
+            } else {
+              g.select<SVGGElement>('g.er-card-r').selectAll('*').remove();
             }
           }
           return;

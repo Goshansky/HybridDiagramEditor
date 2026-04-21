@@ -1,5 +1,6 @@
 import type { DiagramModel } from './model';
 import { extractLayoutHints } from './layoutHints';
+import { getLayoutHintDocument } from './layoutHintSync';
 import {
   estimateErEntitySize,
   parseErAttributeLine,
@@ -164,8 +165,12 @@ export function erDataToDiagramModel(
     const styles: Record<string, string> = {};
     if (ent.styles?.fill) styles.fill = ent.styles.fill;
     if (ent.styles?.stroke) styles.stroke = ent.styles.stroke;
-    if (ent.styles?.strokeWidth !== undefined) {
-      styles['stroke-width'] = `${ent.styles.strokeWidth}px`;
+    const entStyleRaw = ent.styles as unknown as Record<string, unknown> | undefined;
+    const swRaw = entStyleRaw?.strokeWidth ?? entStyleRaw?.['stroke-width'];
+    if (typeof swRaw === 'number') {
+      styles['stroke-width'] = `${swRaw}px`;
+    } else if (typeof swRaw === 'string' && swRaw.trim()) {
+      styles['stroke-width'] = swRaw.trim();
     }
     return {
       id: ent.id,
@@ -218,6 +223,27 @@ export function parseErDiagram(source: string, useAutoLayout = true): DiagramMod
   const data = parseErDiagramAst(source);
   const hints = extractLayoutHints(source);
   const model = erDataToDiagramModel(data, hints);
+  const hintDoc = getLayoutHintDocument(source);
+
+  if (hintDoc?.edgeStyles && typeof hintDoc.edgeStyles === 'object') {
+    for (const [k, styleObj] of Object.entries(hintDoc.edgeStyles)) {
+      const idx = Number.parseInt(k, 10);
+      if (!Number.isFinite(idx) || idx < 0) continue;
+      const edge = model.edges[idx];
+      if (!edge || !styleObj || typeof styleObj !== 'object') continue;
+      const style = styleObj as Record<string, unknown>;
+      if (typeof style.stroke === 'string') edge.styles.stroke = style.stroke;
+      if (typeof style['stroke-width'] === 'string') {
+        edge.styles['stroke-width'] = style['stroke-width'];
+      } else if (typeof style['stroke-width'] === 'number') {
+        edge.styles['stroke-width'] = `${style['stroke-width']}px`;
+      }
+      if (typeof style['stroke-dasharray'] === 'string') {
+        edge.styles['stroke-dasharray'] = style['stroke-dasharray'];
+      }
+    }
+  }
+
   applyErDiagramLayout(model, useAutoLayout);
   return model;
 }

@@ -300,7 +300,6 @@ export const ErDiagramPropertiesPanel: React.FC<ErDiagramPropertiesPanelProps> =
     const edge = model.edges[selectedEdgeIndex]!;
     const stroke = normalizeHex(edge.styles.stroke ?? '', '#4b5563');
     const sw = Number.parseFloat(String(edge.styles['stroke-width'] ?? '2').replace(/px/gi, '')) || 2;
-    const dashed = Boolean(edge.styles['stroke-dasharray']);
     const left = edge.erLeftCard ?? '||';
     const right = edge.erRightCard ?? 'o{';
 
@@ -402,9 +401,9 @@ export const ErDiagramPropertiesPanel: React.FC<ErDiagramPropertiesPanelProps> =
                 type="number"
                 min={1}
                 max={5}
-                step={1}
+                step={0.5}
                 style={input}
-                value={Math.round(sw)}
+                value={sw}
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   if (!Number.isFinite(v)) return;
@@ -412,25 +411,11 @@ export const ErDiagramPropertiesPanel: React.FC<ErDiagramPropertiesPanelProps> =
                     if (!draft.edges[selectedEdgeIndex]) return;
                     draft.edges[selectedEdgeIndex]!.styles['stroke-width'] = `${Math.min(
                       5,
-                      Math.max(1, Math.round(v)),
+                      Math.max(1, v),
                     )}px`;
                   });
                 }}
               />
-            </label>
-            <label style={checkLabel}>
-              <input
-                type="checkbox"
-                checked={dashed}
-                onChange={(e) =>
-                  applyWith((draft) => {
-                    if (!draft.edges[selectedEdgeIndex]) return;
-                    if (e.target.checked) draft.edges[selectedEdgeIndex]!.styles['stroke-dasharray'] = '5 5';
-                    else delete draft.edges[selectedEdgeIndex]!.styles['stroke-dasharray'];
-                  })
-                }
-              />
-              Пунктир
             </label>
           </section>
         </div>
@@ -551,12 +536,5 @@ const attrCard: React.CSSProperties = {
   padding: 10,
   marginBottom: 10,
   background: '#fafafa',
-};
-const checkLabel: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  fontSize: 13,
-  color: '#374151',
 };
 
