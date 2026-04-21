@@ -5,6 +5,7 @@ export type FlowNodeShape = 'rect' | 'diamond' | 'circle' | 'oval' | 'parallelog
 interface AddNodeDialogProps {
   defaultLabel?: string;
   defaultShape?: FlowNodeShape;
+  showShape?: boolean;
   onCancel: () => void;
   onSubmit: (payload: { label: string; shape: FlowNodeShape }) => void;
 }
@@ -12,6 +13,7 @@ interface AddNodeDialogProps {
 export const AddNodeDialog: React.FC<AddNodeDialogProps> = ({
   defaultLabel = 'Новый узел',
   defaultShape = 'rect',
+  showShape = true,
   onCancel,
   onSubmit,
 }) => {
@@ -20,18 +22,20 @@ export const AddNodeDialog: React.FC<AddNodeDialogProps> = ({
   return (
     <DialogShell title="Добавить узел" onCancel={onCancel}>
       <input value={label} onChange={(e) => setLabel(e.target.value)} style={inputStyle} />
-      <select
-        value={shape}
-        onChange={(e) => setShape(e.target.value as FlowNodeShape)}
-        style={inputStyle}
-      >
-        <option value="rect">Прямоугольник</option>
-        <option value="diamond">Ромб</option>
-        <option value="circle">Круг</option>
-        <option value="oval">Овал</option>
-        <option value="parallelogram">Параллелограмм</option>
-        <option value="cloud">Облако</option>
-      </select>
+      {showShape ? (
+        <select
+          value={shape}
+          onChange={(e) => setShape(e.target.value as FlowNodeShape)}
+          style={inputStyle}
+        >
+          <option value="rect">Прямоугольник</option>
+          <option value="diamond">Ромб</option>
+          <option value="circle">Круг</option>
+          <option value="oval">Овал</option>
+          <option value="parallelogram">Параллелограмм</option>
+          <option value="cloud">Облако</option>
+        </select>
+      ) : null}
       <div style={actionsStyle}>
         <button style={secondaryStyle} onClick={onCancel}>
           Отмена

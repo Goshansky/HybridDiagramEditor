@@ -19,6 +19,8 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   deleteEdgeByIndex,
   deleteNodeAndConnectedEdges,
+  generateClassDiagramMermaid,
+  generateERDiagramMermaid,
   mergeEdgeLayoutFromCache,
   parseMermaidByType,
   replaceEdgeTarget,
@@ -572,8 +574,8 @@ export const EditorPage: React.FC = () => {
   };
 
   const beginAddNode = (at?: { x: number; y: number }): void => {
-    if (activeDiagramType !== 'flowchart') {
-      setStatusMessage('Добавление узлов через canvas пока поддерживается только для flowchart');
+    if (activeDiagramType === 'sequence') {
+      setStatusMessage('Добавление узлов для sequenceDiagram через эту кнопку не поддерживается');
       return;
     }
     setPendingNodePos(at ?? { x: 180, y: 140 });
@@ -581,8 +583,8 @@ export const EditorPage: React.FC = () => {
   };
 
   const beginAddEdge = (): void => {
-    if (activeDiagramType !== 'flowchart') {
-      setStatusMessage('Добавление связей через canvas пока поддерживается только для flowchart');
+    if (activeDiagramType === 'sequence') {
+      setStatusMessage('Добавление связей для sequenceDiagram через эту кнопку не поддерживается');
       return;
     }
     setEdgePickActive(true);
@@ -592,11 +594,31 @@ export const EditorPage: React.FC = () => {
   };
 
   const handleCreateNode = (payload: { label: string; shape: FlowNodeShape }): void => {
+    const pos = pendingNodePos ?? { x: 180, y: 140 };
+    if (activeDiagramType === 'class') {
+      const nextId = getNextNamedNodeId(diagramModel?.nodes.map((n) => n.id) ?? [], 'Class');
+      const classLine = `class ${nextId}`;
+      setSource((prev) => upsertLayoutHint(`${prev.trimEnd()}\n  ${classLine}`, nextId, pos.x, pos.y));
+      dispatch(setSelectedNode(nextId));
+      setShowAddNodeDialog(false);
+      setPendingNodePos(null);
+      setStatusMessage(`Добавлен класс "${nextId}"`);
+      return;
+    }
+    if (activeDiagramType === 'er') {
+      const nextId = getNextNamedNodeId(diagramModel?.nodes.map((n) => n.id) ?? [], 'ENTITY');
+      const block = `${nextId} {\n    int id PK\n  }`;
+      setSource((prev) => upsertLayoutHint(`${prev.trimEnd()}\n  ${block}`, nextId, pos.x, pos.y));
+      dispatch(setSelectedNode(nextId));
+      setShowAddNodeDialog(false);
+      setPendingNodePos(null);
+      setStatusMessage(`Добавлена сущность "${nextId}"`);
+      return;
+    }
     const nextId = getNextNodeId(source);
     const def = serializeNode(nextId, payload.label, payload.shape);
     setSource((prev) => {
       const withNode = `${prev.trimEnd()}\n  ${def}`;
-      const pos = pendingNodePos ?? { x: 180, y: 140 };
       return upsertLayoutHint(withNode, nextId, pos.x, pos.y);
     });
     dispatch(setSelectedNode(nextId));
@@ -636,6 +658,30 @@ export const EditorPage: React.FC = () => {
   const handleCreateEdge = (payload: { label: string }): void => {
     if (!edgeDraft) return;
     const nextEdgeIndex = diagramModel?.edges.length ?? 0;
+    if (activeDiagramType === 'class') {
+      const edgeLine = payload.label
+        ? `${edgeDraft.from} --> ${edgeDraft.to} : ${payload.label}`
+        : `${edgeDraft.from} --> ${edgeDraft.to}`;
+      setSource((prev) => appendEdgeLine(prev, edgeLine));
+      dispatch(setSelectedEdge(nextEdgeIndex));
+      setShowAddEdgeDialog(false);
+      setEdgeDraft(null);
+      setEdgePickActive(false);
+      setStatusMessage(`Добавлена связь ${edgeDraft.from} -> ${edgeDraft.to}`);
+      return;
+    }
+    if (activeDiagramType === 'er') {
+      const edgeLine = payload.label
+        ? `${edgeDraft.from} ||--o{ ${edgeDraft.to} : ${payload.label}`
+        : `${edgeDraft.from} ||--o{ ${edgeDraft.to}`;
+      setSource((prev) => appendEdgeLine(prev, edgeLine));
+      dispatch(setSelectedEdge(nextEdgeIndex));
+      setShowAddEdgeDialog(false);
+      setEdgeDraft(null);
+      setEdgePickActive(false);
+      setStatusMessage(`Добавлена ER-связь ${edgeDraft.from} -> ${edgeDraft.to}`);
+      return;
+    }
     const edgeLine = payload.label
       ? `${edgeDraft.from} -->|${payload.label}| ${edgeDraft.to}`
       : `${edgeDraft.from} --> ${edgeDraft.to}`;
@@ -725,25 +771,57 @@ export const EditorPage: React.FC = () => {
           Boolean(target.closest('.cm-editor'));
         if (editable) return;
       }
-      if (activeDiagramType !== 'flowchart') return;
+      if (activeDiagramType !== 'flowchart' && activeDiagramType !== 'class' && activeDiagramType !== 'er') {
+        return;
+      }
 
       if (selectedCanvasEdgeIndex !== null) {
         event.preventDefault();
-        setSource((prev) => deleteEdgeByIndex(prev, selectedCanvasEdgeIndex));
+        if (activeDiagramType === 'flowchart') {
+          setSource((prev) => deleteEdgeByIndex(prev, selectedCanvasEdgeIndex));
+        } else if (diagramModel) {
+          const nextModel = JSON.parse(JSON.stringify(diagramModel)) as typeof diagramModel;
+          nextModel.edges = nextModel.edges.filter((_, i) => i !== selectedCanvasEdgeIndex);
+          setSource((prev) =>
+            activeDiagramType === 'class'
+              ? generateClassDiagramMermaid(nextModel, prev)
+              : generateERDiagramMermaid(nextModel, prev),
+          );
+        }
         dispatch(clearSelectedElement());
         setStatusMessage('Связь удалена');
         return;
       }
       if (selectedCanvasNodeId) {
         event.preventDefault();
-        setSource((prev) => deleteNodeAndConnectedEdges(prev, selectedCanvasNodeId));
+        if (activeDiagramType === 'flowchart') {
+          setSource((prev) => deleteNodeAndConnectedEdges(prev, selectedCanvasNodeId));
+        } else if (diagramModel) {
+          const nextModel = JSON.parse(JSON.stringify(diagramModel)) as typeof diagramModel;
+          nextModel.nodes = nextModel.nodes.filter((n) => n.id !== selectedCanvasNodeId);
+          nextModel.edges = nextModel.edges.filter(
+            (e) => e.from !== selectedCanvasNodeId && e.to !== selectedCanvasNodeId,
+          );
+          if (nextModel.layout?.[selectedCanvasNodeId]) {
+            delete nextModel.layout[selectedCanvasNodeId];
+          }
+          setSource((prev) =>
+            activeDiagramType === 'class'
+              ? generateClassDiagramMermaid(nextModel, prev)
+              : generateERDiagramMermaid(nextModel, prev),
+          );
+        }
         dispatch(clearSelectedElement());
-        setStatusMessage(`Узел "${selectedCanvasNodeId}" удалён`);
+        setStatusMessage(
+          activeDiagramType === 'er'
+            ? `Сущность "${selectedCanvasNodeId}" удалена`
+            : `Узел "${selectedCanvasNodeId}" удалён`,
+        );
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeDiagramType, selectedCanvasEdgeIndex, selectedCanvasNodeId, dispatch]);
+  }, [activeDiagramType, selectedCanvasEdgeIndex, selectedCanvasNodeId, diagramModel, dispatch]);
 
   const handleRestoreAutoLayout = (): void => {
     if (!isDagreLayoutDiagramType(activeDiagramType)) {
@@ -1183,6 +1261,7 @@ export const EditorPage: React.FC = () => {
           </div>
           {showAddNodeDialog ? (
             <AddNodeDialog
+              showShape={activeDiagramType === 'flowchart'}
               onCancel={() => {
                 setShowAddNodeDialog(false);
                 setPendingNodePos(null);
@@ -1385,6 +1464,13 @@ function getNextNodeId(source: string): string {
   let i = 1;
   while (ids.has(`NewNode${i}`)) i += 1;
   return `NewNode${i}`;
+}
+
+function getNextNamedNodeId(existingIds: string[], base: string): string {
+  const ids = new Set(existingIds);
+  let i = 1;
+  while (ids.has(`${base}${i}`)) i += 1;
+  return `${base}${i}`;
 }
 
 function serializeNode(id: string, label: string, shape: FlowNodeShape): string {
