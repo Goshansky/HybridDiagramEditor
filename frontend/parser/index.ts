@@ -37,6 +37,7 @@ export type {
   ClassMethodModel,
   ClassNoteModel,
   ClassRelationKind,
+  ClassVisibility,
   DiagramEdgeModel,
   DiagramEdgePoint,
   DiagramModel,

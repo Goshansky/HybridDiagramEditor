@@ -161,7 +161,12 @@ export function erDataToDiagramModel(
   const nodes: DiagramModel['nodes'] = data.entities.map((ent) => {
     const { width, height } = estimateErEntitySize(ent);
     const pos = layoutHints[ent.id];
-    const styles: Record<string, string> = { ...(ent.styles ?? {}) };
+    const styles: Record<string, string> = {};
+    if (ent.styles?.fill) styles.fill = ent.styles.fill;
+    if (ent.styles?.stroke) styles.stroke = ent.styles.stroke;
+    if (ent.styles?.strokeWidth !== undefined) {
+      styles['stroke-width'] = `${ent.styles.strokeWidth}px`;
+    }
     return {
       id: ent.id,
       label: ent.id,

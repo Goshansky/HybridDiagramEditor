@@ -1,4 +1,5 @@
 import type { DiagramModel } from './model';
+import type { NodeShape } from './ast';
 import { getLayoutHintDocument } from './layoutHintSync';
 import { serializeEdgeLine, serializeNode } from './flowchartSync';
 
@@ -51,7 +52,9 @@ export function generateMermaidFromModel(model: DiagramModel, source: string): s
   const dir = model.metadata.direction ?? 'TD';
   const lines: string[] = [`graph ${dir}`];
   for (const n of model.nodes) {
-    lines.push(`  ${serializeNode(n.id, n.label, n.shape)}`);
+    const shape: NodeShape =
+      n.shape === 'class_box' || n.shape === 'er_box' ? 'rect' : n.shape;
+    lines.push(`  ${serializeNode(n.id, n.label, shape)}`);
   }
   for (const e of model.edges) {
     lines.push(`  ${serializeEdgeLine(e)}`);

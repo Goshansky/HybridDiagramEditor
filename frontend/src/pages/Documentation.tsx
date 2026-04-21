@@ -141,11 +141,11 @@ export const Documentation: React.FC = () => {
                 p: ({ children }) => <p className={styles.p}>{children}</p>,
                 ul: ({ children }) => <ul className={styles.ul}>{children}</ul>,
                 li: ({ children }) => <li className={styles.li}>{children}</li>,
-                code: ({ inline, children }) =>
-                  inline ? (
-                    <code className={styles.codeInline}>{children}</code>
-                  ) : (
+                code: ({ children, className }) =>
+                  className ? (
                     <code className={styles.codeBlock}>{children}</code>
+                  ) : (
+                    <code className={styles.codeInline}>{children}</code>
                   ),
                 pre: ({ children }) => <pre className={styles.pre}>{children}</pre>,
                 a: ({ href, children }) => (

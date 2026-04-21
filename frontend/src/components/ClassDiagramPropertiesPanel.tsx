@@ -106,11 +106,16 @@ export const ClassDiagramPropertiesPanel: React.FC<ClassDiagramPropertiesPanelPr
       commitModel(next);
     };
 
-    const updateStyles = (styles: Partial<Record<string, string>>): void => {
+    const updateStyles = (styles: Record<string, string | undefined>): void => {
       const next = cloneModel(model);
       const n = next.nodes.find((x) => x.id === node.id);
       if (!n) return;
-      n.styles = { ...(n.styles ?? {}), ...styles };
+      const merged: Record<string, string> = { ...(n.styles ?? {}) };
+      for (const [k, v] of Object.entries(styles)) {
+        if (typeof v === 'string') merged[k] = v;
+        else delete merged[k];
+      }
+      n.styles = merged;
       commitModel(next);
     };
 

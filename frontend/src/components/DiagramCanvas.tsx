@@ -166,13 +166,14 @@ function paintClassBoxNode(
 ): void {
   const cb = d.classBox;
   if (!cb || d.shape !== 'class_box') return;
-  g.selectAll<SVGTextElement>('text').remove();
+  g.selectAll<SVGTextElement, PositionedNode>('text').remove();
   g.selectAll<
-    SVGRectElement | SVGPolygonElement | SVGEllipseElement | SVGPathElement | SVGLineElement
+    SVGRectElement | SVGPolygonElement | SVGEllipseElement | SVGPathElement | SVGLineElement,
+    PositionedNode
   >('rect,polygon,ellipse,path,line')
     .remove();
-  g.selectAll<SVGCircleElement>('circle').each(function () {
-    const el = this as SVGCircleElement;
+  g.selectAll<SVGCircleElement, PositionedNode>('circle').each(function () {
+    const el = this;
     if (!el.classList.contains('connect-port')) {
       d3.select(el).remove();
     }
@@ -243,8 +244,8 @@ function paintClassBoxNode(
     g.insert('line', 'circle.connect-port')
       .attr('x1', -w / 2)
       .attr('x2', w / 2)
-      .attr('y1', ty - 4)
-      .attr('y2', ty - 4)
+      .attr('y1', ty - 12)
+      .attr('y2', ty - 12)
       .attr('stroke', '#cbd5e1');
   }
   for (const m of cb.methods) {
@@ -270,13 +271,14 @@ function paintErBoxNode(
 ): void {
   const ent = d.erEntity;
   if (!ent || d.shape !== 'er_box') return;
-  g.selectAll<SVGTextElement>('text').remove();
+  g.selectAll<SVGTextElement, PositionedNode>('text').remove();
   g.selectAll<
-    SVGRectElement | SVGPolygonElement | SVGEllipseElement | SVGPathElement | SVGLineElement
+    SVGRectElement | SVGPolygonElement | SVGEllipseElement | SVGPathElement | SVGLineElement,
+    PositionedNode
   >('rect,polygon,ellipse,path,line')
     .remove();
-  g.selectAll<SVGCircleElement>('circle').each(function () {
-    const el = this as SVGCircleElement;
+  g.selectAll<SVGCircleElement, PositionedNode>('circle').each(function () {
+    const el = this;
     if (!el.classList.contains('connect-port')) {
       d3.select(el).remove();
     }
@@ -346,7 +348,7 @@ function nodeHeightForLabel(label: string, explicitHeight?: number): number {
 }
 
 function setSvgTextMultiline(
-  textSel: d3.Selection<SVGTextElement, unknown, null, undefined>,
+  textSel: d3.Selection<SVGTextElement, PositionedNode, null, undefined>,
   label: string,
 ): void {
   const lines = label.split('\n');
@@ -640,12 +642,9 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         .attr('fill', 'url(#canvas-grid)')
         .attr('pointer-events', 'none');
     }
-    gridRect
-      .attr('x', -2000)
-      .attr('y', -2000)
-      .attr('width', 4000)
-      .attr('height', 4000)
-      .style('display', gridSnap ? null : 'none');
+    gridRect.attr('x', -2000).attr('y', -2000).attr('width', 4000).attr('height', 4000);
+    if (gridSnap) gridRect.style('display', null);
+    else gridRect.style('display', 'none');
 
     let panHitRect = rootG.select<SVGRectElement>('rect.canvas-pan-hit');
     if (panHitRect.empty()) {
@@ -1247,7 +1246,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     // --- nodes data join ---
     const nodeSelection = nodesG
       .selectAll<SVGGElement, PositionedNode>('g.node')
-      .data<PositionedNode>(positionedNodes, (d) => d.id);
+      .data(positionedNodes, (d) => d.id);
 
     const nodeEnter = nodeSelection
       .enter()
@@ -1285,8 +1284,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         PositionedNode
       >('rect,polygon,ellipse,path,line')
         .remove();
-      g.selectAll<SVGCircleElement>('circle').each(function () {
-        const el = this as SVGCircleElement;
+      g.selectAll<SVGCircleElement, PositionedNode>('circle').each(function () {
+        const el = this;
         if (!el.classList.contains('connect-port')) {
           d3.select(el).remove();
         }
@@ -1633,8 +1632,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
             PositionedNode
           >('rect,polygon,ellipse,path,line')
             .remove();
-          g.selectAll<SVGCircleElement>('circle').each(function () {
-            const el = this as SVGCircleElement;
+          g.selectAll<SVGCircleElement, PositionedNode>('circle').each(function () {
+            const el = this;
             if (!el.classList.contains('connect-port')) {
               d3.select(el).remove();
             }

@@ -85,17 +85,31 @@ function parseMemberLine(
   const open = rest.indexOf('(');
   if (open === -1) {
     const colon = rest.indexOf(':');
-    if (colon === -1) return null;
-    let fname = rest.slice(0, colon).trim();
-    const type = rest.slice(colon + 1).trim();
-    if (!fname || !type) return null;
-    if (fname.startsWith('$')) {
-      isStatic = true;
-      fname = fname.slice(1).trim();
+    if (colon !== -1) {
+      let fname = rest.slice(0, colon).trim();
+      const type = rest.slice(colon + 1).trim();
+      if (!fname || !type) return null;
+      if (fname.startsWith('$')) {
+        isStatic = true;
+        fname = fname.slice(1).trim();
+      }
+      return {
+        field: { name: fname, type, visibility: vis, isStatic: isStatic || undefined },
+      };
     }
-    return {
-      field: { name: fname, type, visibility: vis, isStatic: isStatic || undefined },
-    };
+    // Поддержка Mermaid-нотации в class-body: `type name` (например, `String beakColor`)
+    const mTypeName = rest.match(/^([A-Za-z_][\w<>[\]]*)\s+([A-Za-z_][\w]*)$/);
+    if (mTypeName) {
+      return {
+        field: {
+          name: mTypeName[2]!,
+          type: mTypeName[1]!,
+          visibility: vis,
+          isStatic: isStatic || undefined,
+        },
+      };
+    }
+    return null;
   }
 
   let name = rest.slice(0, open).trim();
@@ -122,6 +136,18 @@ function parseMemberLine(
       isAbstract: isAbstract || undefined,
       isStatic: isStatic || undefined,
     },
+  };
+}
+
+/** Mermaid shorthand: `+int age`, `-String name` в строках `Class : member`. */
+function parseShorthandField(line: string): ClassFieldModel | null {
+  const t = line.trim();
+  const m = t.match(/^([+\-#~])\s*([A-Za-z_][\w<>[\]]*)\s+([A-Za-z_][\w]*)$/);
+  if (!m) return null;
+  return {
+    visibility: m[1] as import('./model').ClassVisibility,
+    type: m[2]!,
+    name: m[3]!,
   };
 }
 
@@ -360,6 +386,34 @@ export function parseClassDiagram(source: string, useAutoLayout = true): Diagram
       ensureClass(noteSide[2]!);
       i += 1;
       continue;
+    }
+
+    // Mermaid shorthand: `ClassName : +member`.
+    // Примеры: `Animal : +int age`, `Animal: +isMammal()`.
+    if (!/(<\|--|<\|\.\.|o--|\*--|-->|\.\.>|--)/.test(line)) {
+      const memberLine = line.match(/^([\w~]+)\s*:\s*(.+)$/);
+      if (memberLine) {
+        const classId = memberLine[1]!;
+        const memberRaw = memberLine[2]!.trim();
+        const box = ensureClass(classId);
+        const parsed = parseMemberLine(memberRaw);
+        if (parsed?.field) {
+          if (!box.fields.some((f) => f.name === parsed.field!.name)) {
+            box.fields.push(parsed.field);
+          }
+        } else if (parsed?.method) {
+          if (!box.methods.some((m) => m.name === parsed.method!.name)) {
+            box.methods.push(parsed.method);
+          }
+        } else {
+          const shortField = parseShorthandField(memberRaw);
+          if (shortField && !box.fields.some((f) => f.name === shortField.name)) {
+            box.fields.push(shortField);
+          }
+        }
+        i += 1;
+        continue;
+      }
     }
 
     const rel = parseRelationLine(line);

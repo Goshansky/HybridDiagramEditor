@@ -97,7 +97,7 @@ function applyFlatDagreLayout(model: DiagramModel): DiagramModel {
     g.setEdge(e.from, e.to, { edgeIndex: i }, `e${i}`);
   });
 
-  dagreLayout(g);
+  dagreLayout(g, {} as any);
 
   const nextLayout: Record<string, { x: number; y: number }> = {};
 
@@ -195,7 +195,7 @@ export function applyErDiagramLayout(
     g.setEdge(e.from, e.to, {}, `e${i}`);
   });
 
-  dagreLayout(g);
+  dagreLayout(g, {} as any);
 
   const nextLayout: Record<string, { x: number; y: number }> = {};
   for (const n of model.nodes) {
@@ -303,7 +303,7 @@ function applyCompoundDagreLayout(model: DiagramModel): DiagramModel {
     g.setEdge(e.from, e.to, { edgeIndex: i }, `e${i}`);
   });
 
-  dagreLayout(g);
+  dagreLayout(g, {} as any);
 
   const nextLayout: Record<string, { x: number; y: number }> = {};
 
@@ -401,7 +401,7 @@ export function applyClassDiagramLayout(
     g.setEdge(e.from, e.to, {}, `e${i}`);
   });
 
-  dagreLayout(g);
+  dagreLayout(g, {} as any);
 
   const nextLayout: Record<string, { x: number; y: number }> = {};
   for (const n of model.nodes) {
