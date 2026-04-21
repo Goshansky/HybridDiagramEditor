@@ -12,6 +12,7 @@ import {
   type FlowNodeShape,
 } from '../../parser';
 import { ClassDiagramPropertiesPanel } from './ClassDiagramPropertiesPanel';
+import { ErDiagramPropertiesPanel } from './ErDiagramPropertiesPanel';
 import { useAppDispatch, useAppSelector } from '../store';
 import {
   clearSelectedElement,
@@ -85,7 +86,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const selectedEdgeIndex = useAppSelector((s) => getSelectedEdgeIndexFromState(s.ui));
   const selectionType = useAppSelector((s) => s.ui.selectedElementType);
 
-  if (diagramType !== 'flowchart' && diagramType !== 'class') {
+  if (diagramType !== 'flowchart' && diagramType !== 'class' && diagramType !== 'er') {
     return (
       <aside style={panelOuter}>
         <div style={panelHeader}>
@@ -117,6 +118,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         selectedEdgeIndex={selectedEdgeIndex}
       />
     );
+  }
+
+  if (diagramType === 'er') {
+    return <ErDiagramPropertiesPanel model={model} source={source} onSourceChange={onSourceChange} />;
   }
 
   if (selectedNodeId) {

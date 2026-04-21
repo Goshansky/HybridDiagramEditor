@@ -59,6 +59,7 @@ export {
 } from './layoutHintSync';
 export { generateMermaidFromModel, buildHintDocumentFromModel } from './generateMermaid';
 export { generateClassDiagramMermaid, serializeClassEdgeLine } from './generateClassDiagramMermaid';
+export { generateERDiagramMermaid } from './generateErDiagramMermaid';
 export { parseParams, estimateClassBoxSize } from './classDiagram';
 export * from './flowchartSync';
 
