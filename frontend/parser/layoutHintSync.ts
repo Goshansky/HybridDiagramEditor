@@ -209,3 +209,60 @@ export function upsertEdgeStyleInHint(
   const hintLine = `%% ${JSON.stringify(nextJson)}`;
   return source.trimEnd() ? `${source.trimEnd()}\n${hintLine}` : hintLine;
 }
+
+/**
+ * Удалить layout/edgeStyles записи для удалённых элементов.
+ * - `removedNodeIds`: удаляются ключи из `layout`.
+ * - `removedEdgeIndexes`: удаляются стили удалённых рёбер и переиндексируются оставшиеся.
+ */
+export function pruneLayoutHintAfterDeletion(
+  source: string,
+  opts: { removedNodeIds?: string[]; removedEdgeIndexes?: number[] },
+): string {
+  const lines = source.split(/\r?\n/);
+  const block = extractHintBlock(lines);
+  if (!block) return source;
+
+  const removedNodeIds = new Set(opts.removedNodeIds ?? []);
+  const removedEdgeIndexes = [...(opts.removedEdgeIndexes ?? [])]
+    .filter((x) => Number.isFinite(x) && x >= 0)
+    .sort((a, b) => a - b);
+  if (removedNodeIds.size === 0 && removedEdgeIndexes.length === 0) return source;
+
+  const nextJson: LayoutDocument = { ...block.json };
+
+  if (nextJson.layout && typeof nextJson.layout === 'object') {
+    const nextLayout: Record<string, LayoutPoint> = {};
+    for (const [k, v] of Object.entries(nextJson.layout)) {
+      if (!removedNodeIds.has(k)) nextLayout[k] = v;
+    }
+    if (Object.keys(nextLayout).length > 0) nextJson.layout = nextLayout;
+    else delete nextJson.layout;
+  }
+
+  if (nextJson.edgeStyles && typeof nextJson.edgeStyles === 'object' && removedEdgeIndexes.length > 0) {
+    const nextEdgeStyles: Record<string, Record<string, unknown>> = {};
+    for (const [k, style] of Object.entries(nextJson.edgeStyles)) {
+      const oldIdx = Number.parseInt(k, 10);
+      if (!Number.isFinite(oldIdx) || oldIdx < 0) continue;
+      if (removedEdgeIndexes.includes(oldIdx)) continue;
+      const shift = removedEdgeIndexes.filter((x) => x < oldIdx).length;
+      nextEdgeStyles[String(oldIdx - shift)] = style;
+    }
+    if (Object.keys(nextEdgeStyles).length > 0) nextJson.edgeStyles = nextEdgeStyles;
+    else delete nextJson.edgeStyles;
+  }
+
+  if (Object.keys(nextJson).length === 0) {
+    const nextLines = [...lines.slice(0, block.startLine), ...lines.slice(block.endLine + 1)];
+    return nextLines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+  }
+
+  const replacement = `%% ${JSON.stringify(nextJson)}`;
+  const nextLines = [
+    ...lines.slice(0, block.startLine),
+    replacement,
+    ...lines.slice(block.endLine + 1),
+  ];
+  return nextLines.join('\n');
+}

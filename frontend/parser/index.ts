@@ -54,6 +54,7 @@ export {
   upsertLayoutSize,
   getLayoutHintDocument,
   upsertEdgeStyleInHint,
+  pruneLayoutHintAfterDeletion,
   upsertSequenceParticipantOrder,
   type LayoutDocument,
 } from './layoutHintSync';

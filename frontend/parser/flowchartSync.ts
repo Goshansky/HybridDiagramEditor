@@ -1,5 +1,6 @@
 import type { DiagramEdgeModel } from './model';
 import type { NodeShape } from './ast';
+import { pruneLayoutHintAfterDeletion } from './layoutHintSync';
 
 export type FlowNodeShape = NodeShape;
 
@@ -21,6 +22,20 @@ function extractEdgeRightPart(
   const right = m[1].trim();
   const toHead = new RegExp(`^${escapeRegExp(edge.to)}(?:$|\\s|\\[|\\{|\\(|>)`);
   return toHead.test(right) ? right : null;
+}
+
+function getEdgeLineIndexes(lines: string[]): number[] {
+  return lines
+    .map((line, i) => ({ line, i }))
+    .filter(({ line }) => {
+      const t = line.trim();
+      if (!t || t.startsWith('%%')) return false;
+      if (/^(graph|flowchart|subgraph|end|style|classDef|class|linkStyle|direction)\b/i.test(t)) {
+        return false;
+      }
+      return t.includes('-->') || t.includes('---') || t.includes('-.->');
+    })
+    .map(({ i }) => i);
 }
 
 export function serializeNode(id: string, label: string, shape: FlowNodeShape): string {
@@ -97,17 +112,7 @@ export function replaceEdgeDefinition(
     `^\\s*${from}\\s*${escapeRegExp(op)}(?:\\|[^|]*\\|)?\\s*${to}(?:$|\\s|\\[|\\{|\\(|>)`,
   );
   if (typeof edgeIndex === 'number' && edgeIndex >= 0) {
-    const edgeLineIndexes = lines
-      .map((line, i) => ({ line, i }))
-      .filter(({ line }) => {
-        const t = line.trim();
-        if (!t || t.startsWith('%%')) return false;
-        if (/^(graph|flowchart|subgraph|end|style|classDef|class|linkStyle|direction)\b/i.test(t)) {
-          return false;
-        }
-        return t.includes('-->') || t.includes('---') || t.includes('-.->');
-      })
-      .map(({ i }) => i);
+    const edgeLineIndexes = getEdgeLineIndexes(lines);
     const sourceLineIdx = edgeLineIndexes[edgeIndex];
     if (sourceLineIdx !== undefined) {
       const right = extractEdgeRightPart(lines[sourceLineIdx], edge) ?? edge.to;
@@ -197,17 +202,7 @@ export function replaceEdgeOperator(
       )
     : new RegExp(`^\\s*${from}\\s*${escapeRegExp(oldOp)}\\s*${to}(?:$|\\s|\\[|\\{|\\(|>)`);
   if (typeof edgeIndex === 'number' && edgeIndex >= 0) {
-    const edgeLineIndexes = lines
-      .map((line, i) => ({ line, i }))
-      .filter(({ line }) => {
-        const t = line.trim();
-        if (!t || t.startsWith('%%')) return false;
-        if (/^(graph|flowchart|subgraph|end|style|classDef|class|linkStyle|direction)\b/i.test(t)) {
-          return false;
-        }
-        return t.includes('-->') || t.includes('---') || t.includes('-.->');
-      })
-      .map(({ i }) => i);
+    const edgeLineIndexes = getEdgeLineIndexes(lines);
     const sourceLineIdx = edgeLineIndexes[edgeIndex];
     if (sourceLineIdx !== undefined) {
       const right = extractEdgeRightPart(lines[sourceLineIdx], edge) ?? edge.to;
@@ -230,6 +225,54 @@ export function replaceEdgeOperator(
     return lines.join('\n');
   }
   return source;
+}
+
+/** Удалить связь по индексу из модели (как в `model.edges[index]`). */
+export function deleteEdgeByIndex(source: string, edgeIndex: number): string {
+  if (edgeIndex < 0) return source;
+  const lines = source.split(/\r?\n/);
+  const edgeLineIndexes = getEdgeLineIndexes(lines);
+  const sourceLineIdx = edgeLineIndexes[edgeIndex];
+  if (sourceLineIdx === undefined) return source;
+  lines.splice(sourceLineIdx, 1);
+  const nextSource = lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+  return pruneLayoutHintAfterDeletion(nextSource, { removedEdgeIndexes: [edgeIndex] });
+}
+
+/** Удалить узел и все связи, где он from/to. */
+export function deleteNodeAndConnectedEdges(source: string, nodeId: string): string {
+  const id = escapeRegExp(nodeId);
+  const lines = source.split(/\r?\n/);
+  const edgeLineIndexes = getEdgeLineIndexes(lines);
+  const edgeOrderByLineIdx = new Map<number, number>(edgeLineIndexes.map((lineIdx, i) => [lineIdx, i]));
+  const removedEdgeIndexes: number[] = [];
+  const nodeLineRe = new RegExp(
+    `^\\s*${id}\\s*(?:\\[[^\\]]*\\]|\\{[^}]*\\}|\\(\\([^)]*\\)\\)|\\(\\[[^\\]]*\\]\\)|\\[\\[[^\\]]*\\]\\]|\\[\\([^)]*\\)\\]|>[^\\]]*\\])?\\s*$`,
+  );
+  const styleLineRe = new RegExp(`^\\s*style\\s+${id}(?:\\s|$)`, 'i');
+  const edgeLineRe = /^\s*([A-Za-zА-Яа-я0-9_]+)\s*(?:-->|---|-.->)(?:\|[^|]*\|)?\s*([A-Za-zА-Яа-я0-9_]+)/;
+  const kept: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
+    const t = line.trim();
+    if (nodeLineRe.test(line) || styleLineRe.test(line)) {
+      continue;
+    }
+    if (t && !t.startsWith('%%')) {
+      const m = line.match(edgeLineRe);
+      if (m && (m[1] === nodeId || m[2] === nodeId)) {
+        const edgeIdx = edgeOrderByLineIdx.get(i);
+        if (edgeIdx !== undefined) removedEdgeIndexes.push(edgeIdx);
+        continue;
+      }
+    }
+    kept.push(line);
+  }
+  const nextSource = kept.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+  return pruneLayoutHintAfterDeletion(nextSource, {
+    removedNodeIds: [nodeId],
+    removedEdgeIndexes,
+  });
 }
 
 /** Добавить или заменить строку `style NodeId ...` для flowchart. */

@@ -18,6 +18,8 @@ import {
 import { Link, useLocation } from 'react-router-dom';
 
 import {
+  deleteEdgeByIndex,
+  deleteNodeAndConnectedEdges,
   mergeEdgeLayoutFromCache,
   parseMermaidByType,
   replaceEdgeTarget,
@@ -687,6 +689,41 @@ export const EditorPage: React.FC = () => {
 
   const layoutHintsInSource =
     isDagreLayoutDiagramType(activeDiagramType) && sourceHasLayoutPositionHints(source);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Delete') return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName?.toLowerCase();
+        const editable =
+          tag === 'input' ||
+          tag === 'textarea' ||
+          tag === 'select' ||
+          target.isContentEditable ||
+          Boolean(target.closest('.cm-editor'));
+        if (editable) return;
+      }
+      if (activeDiagramType !== 'flowchart') return;
+
+      if (selectedCanvasEdgeIndex !== null) {
+        event.preventDefault();
+        setSource((prev) => deleteEdgeByIndex(prev, selectedCanvasEdgeIndex));
+        dispatch(clearSelectedElement());
+        setStatusMessage('Связь удалена');
+        return;
+      }
+      if (selectedCanvasNodeId) {
+        event.preventDefault();
+        setSource((prev) => deleteNodeAndConnectedEdges(prev, selectedCanvasNodeId));
+        dispatch(clearSelectedElement());
+        setStatusMessage(`Узел "${selectedCanvasNodeId}" удалён`);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeDiagramType, selectedCanvasEdgeIndex, selectedCanvasNodeId, dispatch]);
 
   const handleRestoreAutoLayout = (): void => {
     if (!isDagreLayoutDiagramType(activeDiagramType)) {
