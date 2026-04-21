@@ -16,6 +16,7 @@ export interface VersionDto {
   id: number;
   diagram_id: number;
   content: string;
+  diagram_type: DiagramType;
   version_number: number;
   created_at: string;
 }

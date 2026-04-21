@@ -19,6 +19,7 @@ export interface ProjectItem {
 export interface DiagramVersionItem {
   id: number;
   diagramId: number;
+  diagramType: DiagramType;
   versionNumber: number;
   createdAt: string;
   content: string;

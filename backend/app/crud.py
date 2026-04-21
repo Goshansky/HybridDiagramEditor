@@ -1,8 +1,8 @@
-from sqlalchemy import Select, desc, func, select
+from sqlalchemy import Select, and_, desc, func, select
 from sqlalchemy.orm import Session
 
 from app.auth import get_password_hash, verify_password
-from app.models import Diagram, User, Version
+from app.models import Diagram, User, Version, utcnow
 from app.schemas import DiagramCreate, DiagramUpdate, ProjectItemRead, UserCreate
 
 
@@ -43,7 +43,6 @@ def create_diagram(db: Session, user_id: int, payload: DiagramCreate) -> Diagram
         user_id=user_id,
         name=payload.name,
         content=initial_content,
-        diagram_type=payload.type,
     )
     db.add(diagram)
     db.flush()
@@ -51,6 +50,7 @@ def create_diagram(db: Session, user_id: int, payload: DiagramCreate) -> Diagram
     first_version = Version(
         diagram_id=diagram.id,
         content=initial_content,
+        diagram_type=payload.type,
         version_number=1,
     )
     db.add(first_version)
@@ -72,25 +72,36 @@ def update_diagram(
     diagram: Diagram,
     payload: DiagramUpdate,
 ) -> Diagram:
+    latest_type_stmt = (
+        select(Version.diagram_type)
+        .where(Version.diagram_id == diagram.id)
+        .order_by(desc(Version.version_number))
+        .limit(1)
+    )
+    latest_type = db.execute(latest_type_stmt).scalar_one_or_none() or "flowchart"
+    next_type = payload.diagram_type if payload.diagram_type is not None else latest_type
+
     if payload.name is not None:
         diagram.name = payload.name
     if payload.content is not None:
         diagram.content = payload.content
-    if payload.diagram_type is not None:
-        diagram.diagram_type = payload.diagram_type
+    if payload.diagram_type is not None and payload.content is None and payload.name is None:
+        diagram.updated_at = utcnow()
     db.add(diagram)
     db.flush()
 
-    if payload.content is not None:
+    if payload.content is not None or payload.diagram_type is not None:
         next_version_stmt = (
             select(func.coalesce(func.max(Version.version_number), 0) + 1)
             .where(Version.diagram_id == diagram.id)
         )
         next_version = db.execute(next_version_stmt).scalar_one()
+        next_content = payload.content if payload.content is not None else diagram.content
         db.add(
             Version(
                 diagram_id=diagram.id,
-                content=diagram.content,
+                content=next_content,
+                diagram_type=next_type,
                 version_number=next_version,
             )
         )
@@ -110,17 +121,41 @@ def list_diagram_versions(db: Session, diagram_id: int) -> list[Version]:
 
 
 def list_projects(db: Session, user_id: int) -> list[ProjectItemRead]:
+    latest_version_subq = (
+        select(
+            Version.diagram_id.label("diagram_id"),
+            func.max(Version.version_number).label("max_version"),
+        )
+        .group_by(Version.diagram_id)
+        .subquery()
+    )
+    latest_type_subq = (
+        select(
+            Version.diagram_id.label("diagram_id"),
+            Version.diagram_type.label("diagram_type"),
+        )
+        .join(
+            latest_version_subq,
+            and_(
+                latest_version_subq.c.diagram_id == Version.diagram_id,
+                latest_version_subq.c.max_version == Version.version_number,
+            ),
+        )
+        .subquery()
+    )
+
     stmt = (
         select(
             Diagram.id,
             Diagram.name,
-            Diagram.diagram_type,
+            latest_type_subq.c.diagram_type,
             Diagram.updated_at,
             func.count(Version.id).label("versions_count"),
         )
+        .outerjoin(latest_type_subq, latest_type_subq.c.diagram_id == Diagram.id)
         .outerjoin(Version, Version.diagram_id == Diagram.id)
         .where(Diagram.user_id == user_id)
-        .group_by(Diagram.id)
+        .group_by(Diagram.id, latest_type_subq.c.diagram_type)
         .order_by(desc(Diagram.updated_at))
     )
     rows = db.execute(stmt).all()
@@ -128,7 +163,7 @@ def list_projects(db: Session, user_id: int) -> list[ProjectItemRead]:
         ProjectItemRead(
             id=row.id,
             name=row.name,
-            diagram_type=row.diagram_type,
+            diagram_type=row.diagram_type or "flowchart",
             updated_at=row.updated_at,
             versions_count=int(row.versions_count or 0),
         )

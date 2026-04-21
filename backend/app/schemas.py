@@ -61,6 +61,7 @@ class VersionRead(BaseModel):
     id: int
     diagram_id: int
     content: str
+    diagram_type: DiagramType
     version_number: int
     created_at: datetime
 

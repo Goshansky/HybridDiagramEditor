@@ -33,11 +33,6 @@ class Diagram(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    diagram_type: Mapped[str] = mapped_column(
-        Enum(*DIAGRAM_TYPES, name="diagram_type_enum"),
-        nullable=False,
-        default="flowchart",
-    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -53,6 +48,13 @@ class Diagram(Base):
         order_by="Version.version_number",
     )
 
+    @property
+    def diagram_type(self) -> str:
+        if not self.versions:
+            return "flowchart"
+        latest = max(self.versions, key=lambda v: v.version_number)
+        return latest.diagram_type or "flowchart"
+
 
 class Version(Base):
     __tablename__ = "versions"
@@ -60,6 +62,11 @@ class Version(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     diagram_id: Mapped[int] = mapped_column(ForeignKey("diagrams.id", ondelete="CASCADE"), index=True, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    diagram_type: Mapped[str] = mapped_column(
+        Enum(*DIAGRAM_TYPES, name="diagram_type_enum"),
+        nullable=False,
+        default="flowchart",
+    )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 

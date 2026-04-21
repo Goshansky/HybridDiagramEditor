@@ -123,6 +123,17 @@ export const EditorPage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const location = useLocation();
   const routeDiagramId = (location.state as { diagramId?: number } | null)?.diagramId;
+  const detectedDiagramType = useMemo(
+    () => detectDiagramTypeFromSource(source),
+    [source],
+  );
+  const activeDiagramType = detectedDiagramType ?? currentDiagramType;
+
+  useEffect(() => {
+    if (detectedDiagramType && detectedDiagramType !== currentDiagramType) {
+      dispatch(setCurrentDiagramType(detectedDiagramType));
+    }
+  }, [detectedDiagramType, currentDiagramType, dispatch]);
 
   const loadDiagramById = async (
     diagramId: number,
@@ -139,6 +150,7 @@ export const EditorPage: React.FC = () => {
         const mapped = versionItems.map((version) => ({
           id: version.id,
           diagramId: version.diagram_id,
+          diagramType: version.diagram_type,
           versionNumber: version.version_number,
           createdAt: version.created_at,
           content: version.content,
@@ -173,7 +185,7 @@ export const EditorPage: React.FC = () => {
   const parsed = useMemo(() => {
     try {
       return {
-        model: parseMermaidByType(source, currentDiagramType, useAutoLayout),
+        model: parseMermaidByType(source, activeDiagramType, useAutoLayout),
         error: null as string | null,
       };
     } catch (e) {
@@ -183,10 +195,10 @@ export const EditorPage: React.FC = () => {
         error: msg,
       };
     }
-  }, [currentDiagramType, source, useAutoLayout]);
+  }, [activeDiagramType, source, useAutoLayout]);
 
   useEffect(() => {
-    if (!isDagreLayoutDiagramType(currentDiagramType)) {
+    if (!isDagreLayoutDiagramType(activeDiagramType)) {
       dagreEdgeCacheRef.current = null;
       return;
     }
@@ -194,17 +206,17 @@ export const EditorPage: React.FC = () => {
       return;
     }
     dagreEdgeCacheRef.current = snapshotEdgesForLayoutCache(parsed.model);
-  }, [parsed.model, parsed.error, currentDiagramType, useAutoLayout]);
+  }, [parsed.model, parsed.error, activeDiagramType, useAutoLayout]);
 
   const diagramModel = useMemo(() => {
     if (parsed.error || !parsed.model) return null;
-    if (!isDagreLayoutDiagramType(currentDiagramType)) return parsed.model;
+    if (!isDagreLayoutDiagramType(activeDiagramType)) return parsed.model;
     const model = parsed.model;
     if (!useAutoLayout && dagreEdgeCacheRef.current?.length) {
       mergeEdgeLayoutFromCache(model, dagreEdgeCacheRef.current);
     }
     return model;
-  }, [parsed.model, parsed.error, currentDiagramType, useAutoLayout, source]);
+  }, [parsed.model, parsed.error, activeDiagramType, useAutoLayout, source]);
 
   const triggerZoom = (type: 'in' | 'out' | 'reset'): void => {
     if (type === 'in') {
@@ -393,7 +405,7 @@ export const EditorPage: React.FC = () => {
         }
         const created = await createDiagram({
           name,
-          type: currentDiagramType,
+          type: activeDiagramType,
           content: source,
         });
         dispatch(
@@ -442,6 +454,7 @@ export const EditorPage: React.FC = () => {
           versionItems.map((version) => ({
             id: version.id,
             diagramId: version.diagram_id,
+            diagramType: version.diagram_type,
             versionNumber: version.version_number,
             createdAt: version.created_at,
             content: version.content,
@@ -506,23 +519,6 @@ export const EditorPage: React.FC = () => {
     }
   };
 
-  const handleSelectDiagramType = (diagramType: DiagramType): void => {
-    if (diagramType === currentDiagramType) {
-      return;
-    }
-    const applyTemplate = window.confirm(
-      'Заменить текущий текст на шаблон выбранного типа? Нажми "Отмена", чтобы оставить как есть.',
-    );
-    dispatch(setCurrentDiagramType(diagramType));
-    if (applyTemplate) {
-      dispatch(enableAutoLayout());
-      setSource(getTemplateByDiagramType(diagramType));
-      setStatusMessage(`Выбран тип "${diagramType}", загружен шаблон`);
-    } else {
-      setStatusMessage(`Выбран тип "${diagramType}", текущий текст сохранен`);
-    }
-  };
-
   const handleCreateDiagram = async (): Promise<void> => {
     const enteredName = window.prompt('Название диаграммы', 'Новая диаграмма');
     const name = enteredName?.trim();
@@ -531,17 +527,8 @@ export const EditorPage: React.FC = () => {
       return;
     }
 
-    const typeValue = window.prompt(
-      'Тип диаграммы: flowchart | class | sequence | er',
-      currentDiagramType,
-    );
-    const selectedType = normalizeDiagramType(typeValue ?? currentDiagramType);
-    if (!selectedType) {
-      setStatusMessage('Создание отменено: указан некорректный тип');
-      return;
-    }
-
     try {
+      const selectedType = detectDiagramTypeFromSource(source) ?? activeDiagramType;
       const template = getTemplateByDiagramType(selectedType);
       const created = await createDiagram({
         name,
@@ -573,7 +560,7 @@ export const EditorPage: React.FC = () => {
   };
 
   const beginAddNode = (at?: { x: number; y: number }): void => {
-    if (currentDiagramType !== 'flowchart') {
+    if (activeDiagramType !== 'flowchart') {
       setStatusMessage('Добавление узлов через canvas пока поддерживается только для flowchart');
       return;
     }
@@ -582,7 +569,7 @@ export const EditorPage: React.FC = () => {
   };
 
   const beginAddEdge = (): void => {
-    if (currentDiagramType !== 'flowchart') {
+    if (activeDiagramType !== 'flowchart') {
       setStatusMessage('Добавление связей через canvas пока поддерживается только для flowchart');
       return;
     }
@@ -646,7 +633,7 @@ export const EditorPage: React.FC = () => {
   };
 
   const handleCreateEdgeByDrag = (from: string, to: string): void => {
-    if (currentDiagramType !== 'flowchart') return;
+    if (activeDiagramType !== 'flowchart') return;
     if (from === to) return;
     const edgeLine = `${from} --> ${to}`;
     setSource((prev) => appendEdgeLine(prev, edgeLine));
@@ -689,10 +676,10 @@ export const EditorPage: React.FC = () => {
   };
 
   const layoutHintsInSource =
-    isDagreLayoutDiagramType(currentDiagramType) && sourceHasLayoutPositionHints(source);
+    isDagreLayoutDiagramType(activeDiagramType) && sourceHasLayoutPositionHints(source);
 
   const handleRestoreAutoLayout = (): void => {
-    if (!isDagreLayoutDiagramType(currentDiagramType)) {
+    if (!isDagreLayoutDiagramType(activeDiagramType)) {
       setStatusMessage('Автораскладка с пересчётом dagre доступна для flowchart и class');
       return;
     }
@@ -895,8 +882,7 @@ export const EditorPage: React.FC = () => {
             <CodeEditor
               value={source}
               onChange={handleCodeEditorChange}
-              diagramType={currentDiagramType}
-              onDiagramTypeChange={handleSelectDiagramType}
+              diagramType={activeDiagramType}
               onOpenFile={openFile}
               onSaveCode={() => {
                 downloadTextFile('diagram.mmd', source);
@@ -1028,7 +1014,7 @@ export const EditorPage: React.FC = () => {
                 model={diagramModel}
                 canvasId="diagram-canvas"
                 zoomCommand={zoomCommandStable}
-                disableNodeDrag={currentDiagramType === 'sequence'}
+                disableNodeDrag={activeDiagramType === 'sequence'}
                 gridSnap={gridSnap}
                 selectedNodeId={selectedCanvasNodeId ?? undefined}
                 selectedEdgeIndex={selectedCanvasEdgeIndex}
@@ -1038,16 +1024,16 @@ export const EditorPage: React.FC = () => {
                   dispatch(setSelectedEdge(idx));
                 }}
                 onNodeDoubleClick={(id) => {
-                  if (currentDiagramType !== 'flowchart') return;
+                  if (activeDiagramType !== 'flowchart') return;
                   setEditingNodeId(id);
                 }}
                 onEdgeDoubleClick={(edge) => {
-                  if (currentDiagramType !== 'flowchart') return;
+                  if (activeDiagramType !== 'flowchart') return;
                   setEditingEdge(edge);
                 }}
                 onCreateEdge={handleCreateEdgeByDrag}
                 onReconnectEdge={(edgeIndex, newTo) => {
-                  if (currentDiagramType !== 'flowchart') return;
+                  if (activeDiagramType !== 'flowchart') return;
                   const e = diagramModel?.edges[edgeIndex];
                   if (!e) return;
                   dispatch(disableAutoLayout());
@@ -1060,7 +1046,7 @@ export const EditorPage: React.FC = () => {
                   setStatusMessage(`Связь: ${e.from} → ${newTo}`);
                 }}
                 onNodePositionChange={(id, x, y, size) => {
-                  if (isDagreLayoutDiagramType(currentDiagramType)) {
+                  if (isDagreLayoutDiagramType(activeDiagramType)) {
                     if (diagramModel) {
                       dagreEdgeCacheRef.current = snapshotEdgesForLayoutCache(diagramModel);
                     }
@@ -1073,7 +1059,7 @@ export const EditorPage: React.FC = () => {
                   setStatusMessage(`Обновлен layout-хинт для узла "${id}"`);
                 }}
                 onSequenceParticipantReorder={
-                  currentDiagramType === 'sequence'
+                  activeDiagramType === 'sequence'
                     ? (orderedIds) => {
                         setSource((prev) => upsertSequenceParticipantOrder(prev, orderedIds));
                         setStatusMessage('Порядок участников сохранён в %%-хинте');
@@ -1124,7 +1110,7 @@ export const EditorPage: React.FC = () => {
           properties={
             hasCanvasSelection ? (
               <PropertiesPanel
-                diagramType={currentDiagramType}
+                diagramType={activeDiagramType}
                 model={diagramModel}
                 source={source}
                 onSourceChange={setSource}
@@ -1288,11 +1274,13 @@ function getTemplateByDiagramType(diagramType: DiagramType): string {
   B -->|Нет| D[Действие 2]`;
 }
 
-function normalizeDiagramType(raw: string): DiagramType | null {
-  const value = raw.trim().toLowerCase();
-  if (value === 'flowchart' || value === 'class' || value === 'sequence' || value === 'er') {
-    return value;
-  }
+function detectDiagramTypeFromSource(source: string): DiagramType | null {
+  const firstLine = source.split(/\r?\n/)[0]?.trim().toLowerCase() ?? '';
+  if (!firstLine) return null;
+  if (firstLine.startsWith('classdiagram')) return 'class';
+  if (firstLine.startsWith('sequencediagram')) return 'sequence';
+  if (firstLine.startsWith('erdiagram')) return 'er';
+  if (firstLine.startsWith('flowchart') || firstLine.startsWith('graph')) return 'flowchart';
   return null;
 }
 

@@ -18,6 +18,7 @@ def test_create_diagram_creates_initial_version(db_session: Session, user_factor
     assert len(versions) == 1
     assert versions[0].version_number == 1
     assert versions[0].content == "A->B"
+    assert versions[0].diagram_type == "flowchart"
 
 
 def test_update_diagram_with_content_adds_next_version(db_session: Session, user_factory) -> None:
@@ -39,6 +40,7 @@ def test_update_diagram_with_content_adds_next_version(db_session: Session, user
     assert updated.diagram_type == "class"
     assert [v.version_number for v in versions] == [2, 1]
     assert versions[0].content == "v2"
+    assert versions[0].diagram_type == "class"
 
 
 def test_update_diagram_without_content_does_not_add_version(db_session: Session, user_factory) -> None:

@@ -9,7 +9,6 @@ interface CodeEditorProps {
   value: string;
   onChange: (value: string) => void;
   diagramType: DiagramType;
-  onDiagramTypeChange: (type: DiagramType) => void;
   onOpenFile: () => void;
   onSaveCode: () => void;
   onCopyCode: () => void;
@@ -24,7 +23,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   value,
   onChange,
   diagramType,
-  onDiagramTypeChange,
   onOpenFile,
   onSaveCode,
   onCopyCode,
@@ -165,24 +163,21 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           <button title="Сохранить текст" onClick={onSaveCode} style={headerIconButtonStyle}>
             <Save size={16} color="#4b5563" />
           </button>
-          <select
-            value={diagramType}
-            onChange={(event) => onDiagramTypeChange(event.target.value as DiagramType)}
+          <span
             style={{
               minWidth: 180,
               padding: '7px 10px',
-              background: '#ffffff',
-              border: '1px solid #d1d5db',
+              background: '#eef2ff',
+              border: '1px solid #c7d2fe',
               borderRadius: 8,
               fontSize: 13,
-              color: '#111827',
+              color: '#312e81',
+              textAlign: 'center',
             }}
+            title="Тип определяется автоматически по первой строке"
           >
-            <option value="flowchart">Блок-схема</option>
-            <option value="class">Диаграмма классов</option>
-            <option value="sequence">Диаграмма последовательности</option>
-            <option value="er">ER-диаграмма</option>
-          </select>
+            Тип: {diagramType}
+          </span>
         </div>
       </div>
 
