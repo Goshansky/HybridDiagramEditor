@@ -7,6 +7,22 @@ export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function extractEdgeRightPart(
+  line: string,
+  edge: { from: string; to: string; type: 'arrow' | 'line' },
+): string | null {
+  const op = edge.type === 'line' ? '---' : '-->';
+  const m = line.match(
+    new RegExp(
+      `^\\s*${escapeRegExp(edge.from)}\\s*${escapeRegExp(op)}(?:\\|[^|]*\\|)?\\s*(.+?)\\s*$`,
+    ),
+  );
+  if (!m?.[1]) return null;
+  const right = m[1].trim();
+  const toHead = new RegExp(`^${escapeRegExp(edge.to)}(?:$|\\s|\\[|\\{|\\(|>)`);
+  return toHead.test(right) ? right : null;
+}
+
 export function serializeNode(id: string, label: string, shape: FlowNodeShape): string {
   if (shape === 'diamond') return `${id}{${label}}`;
   if (shape === 'circle') return `${id}((${label}))`;
@@ -23,9 +39,13 @@ export function replaceNodeDefinition(
   shape: FlowNodeShape,
 ): string {
   const lines = source.split(/\r?\n/);
+  const idChar = 'A-Za-zА-Яа-я0-9_';
   const shapeBody =
     '(\\[[^\\]]*\\]|\\{[^}]*\\}|\\(\\([^)]*\\)\\)|\\(\\[[^\\]]*\\]\\)|\\[\\[[^\\]]*\\]\\]|\\[\\([^)]*\\)\\]|>[^\\]]*\\])';
   const lineNodePattern = new RegExp(`^\\s*${escapeRegExp(nodeId)}\\s*${shapeBody}\\s*$`);
+  const inlineNodePattern = new RegExp(
+    `(^|[^${idChar}])(${escapeRegExp(nodeId)})\\s*${shapeBody}`,
+  );
   const bareNodePattern = new RegExp(`^\\s*${escapeRegExp(nodeId)}\\s*$`);
   const shapeOnlyPattern = new RegExp(
     `^\\s*(?:\\[\\s*${escapeRegExp(nodeId)}\\s*\\]|\\{\\s*${escapeRegExp(nodeId)}\\s*\\}|\\(\\(\\s*${escapeRegExp(nodeId)}\\s*\\)\\)|\\(\\[\\s*${escapeRegExp(nodeId)}\\s*\\]\\)|\\[\\[\\s*${escapeRegExp(nodeId)}\\s*\\]\\]|\\[\\(\\s*${escapeRegExp(nodeId)}\\s*\\)\\]|>\\s*${escapeRegExp(nodeId)}\\s*\\])\\s*$`,
@@ -35,6 +55,11 @@ export function replaceNodeDefinition(
   if (idx >= 0) {
     const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
     lines[idx] = `${indent}${replacement}`;
+    return lines.join('\n');
+  }
+  const inlineIdx = lines.findIndex((line) => inlineNodePattern.test(line));
+  if (inlineIdx >= 0) {
+    lines[inlineIdx] = lines[inlineIdx].replace(inlineNodePattern, `$1${replacement}`);
     return lines.join('\n');
   }
   const bareIdx = lines.findIndex((line) => bareNodePattern.test(line));
@@ -56,6 +81,7 @@ export function replaceEdgeDefinition(
   source: string,
   edge: { from: string; to: string; label?: string; type: 'arrow' | 'line' },
   newLabel: string,
+  edgeIndex?: number,
 ): string {
   const lines = source.split(/\r?\n/);
   const op = edge.type === 'line' ? '---' : '-->';
@@ -64,24 +90,51 @@ export function replaceEdgeDefinition(
   const hasCurrentLabel = edge.label !== undefined && edge.label !== '';
   const exactPattern = hasCurrentLabel
     ? new RegExp(
-        `\\b${from}\\b\\s*${escapeRegExp(op)}\\|${escapeRegExp(edge.label ?? '')}\\|\\s*\\b${to}\\b`,
+        `^\\s*${from}\\s*${escapeRegExp(op)}\\|${escapeRegExp(edge.label ?? '')}\\|\\s*${to}(?:$|\\s|\\[|\\{|\\(|>)`,
       )
-    : new RegExp(`\\b${from}\\b\\s*${escapeRegExp(op)}\\s*\\b${to}\\b`);
+    : new RegExp(`^\\s*${from}\\s*${escapeRegExp(op)}\\s*${to}(?:$|\\s|\\[|\\{|\\(|>)`);
   const fallbackPattern = new RegExp(
-    `\\b${from}\\b\\s*${escapeRegExp(op)}(?:\\|[^|]*\\|)?\\s*\\b${to}\\b`,
+    `^\\s*${from}\\s*${escapeRegExp(op)}(?:\\|[^|]*\\|)?\\s*${to}(?:$|\\s|\\[|\\{|\\(|>)`,
   );
-  const replacement = newLabel
-    ? `${edge.from} ${op}|${newLabel}| ${edge.to}`
-    : `${edge.from} ${op} ${edge.to}`;
+  if (typeof edgeIndex === 'number' && edgeIndex >= 0) {
+    const edgeLineIndexes = lines
+      .map((line, i) => ({ line, i }))
+      .filter(({ line }) => {
+        const t = line.trim();
+        if (!t || t.startsWith('%%')) return false;
+        if (/^(graph|flowchart|subgraph|end|style|classDef|class|linkStyle|direction)\b/i.test(t)) {
+          return false;
+        }
+        return t.includes('-->') || t.includes('---') || t.includes('-.->');
+      })
+      .map(({ i }) => i);
+    const sourceLineIdx = edgeLineIndexes[edgeIndex];
+    if (sourceLineIdx !== undefined) {
+      const right = extractEdgeRightPart(lines[sourceLineIdx], edge) ?? edge.to;
+      const replacement = newLabel
+        ? `${edge.from} ${op}|${newLabel}| ${right}`
+        : `${edge.from} ${op} ${right}`;
+      const indent = lines[sourceLineIdx].match(/^(\s*)/)?.[1] ?? '';
+      lines[sourceLineIdx] = `${indent}${replacement}`;
+      return lines.join('\n');
+    }
+  }
   let idx = lines.findIndex((line) => exactPattern.test(line));
   if (idx < 0) {
     idx = lines.findIndex((line) => fallbackPattern.test(line));
   }
   if (idx >= 0) {
+    const right = extractEdgeRightPart(lines[idx], edge) ?? edge.to;
+    const replacement = newLabel
+      ? `${edge.from} ${op}|${newLabel}| ${right}`
+      : `${edge.from} ${op} ${right}`;
     const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
     lines[idx] = `${indent}${replacement}`;
     return lines.join('\n');
   }
+  const replacement = newLabel
+    ? `${edge.from} ${op}|${newLabel}| ${edge.to}`
+    : `${edge.from} ${op} ${edge.to}`;
   return `${source.trimEnd()}\n  ${replacement}`;
 }
 
@@ -129,6 +182,7 @@ export function replaceEdgeOperator(
   source: string,
   edge: { from: string; to: string; label?: string; type: 'arrow' | 'line' },
   newType: 'arrow' | 'line',
+  edgeIndex?: number,
 ): string {
   if (edge.type === newType) return source;
   const lines = source.split(/\r?\n/);
@@ -139,15 +193,40 @@ export function replaceEdgeOperator(
   const labeled = edge.label !== undefined && edge.label !== '';
   const linePattern = labeled
     ? new RegExp(
-        `\\b${from}\\b\\s*${escapeRegExp(oldOp)}\\|${escapeRegExp(edge.label ?? '')}\\|\\s*\\b${to}\\b`,
+        `^\\s*${from}\\s*${escapeRegExp(oldOp)}\\|${escapeRegExp(edge.label ?? '')}\\|\\s*${to}(?:$|\\s|\\[|\\{|\\(|>)`,
       )
-    : new RegExp(`\\b${from}\\b\\s*${escapeRegExp(oldOp)}\\s*\\b${to}\\b`);
-  const replacement = labeled
-    ? `${edge.from} ${newOp}|${edge.label}| ${edge.to}`
-    : `${edge.from} ${newOp} ${edge.to}`;
+    : new RegExp(`^\\s*${from}\\s*${escapeRegExp(oldOp)}\\s*${to}(?:$|\\s|\\[|\\{|\\(|>)`);
+  if (typeof edgeIndex === 'number' && edgeIndex >= 0) {
+    const edgeLineIndexes = lines
+      .map((line, i) => ({ line, i }))
+      .filter(({ line }) => {
+        const t = line.trim();
+        if (!t || t.startsWith('%%')) return false;
+        if (/^(graph|flowchart|subgraph|end|style|classDef|class|linkStyle|direction)\b/i.test(t)) {
+          return false;
+        }
+        return t.includes('-->') || t.includes('---') || t.includes('-.->');
+      })
+      .map(({ i }) => i);
+    const sourceLineIdx = edgeLineIndexes[edgeIndex];
+    if (sourceLineIdx !== undefined) {
+      const right = extractEdgeRightPart(lines[sourceLineIdx], edge) ?? edge.to;
+      const replacement = labeled
+        ? `${edge.from} ${newOp}|${edge.label}| ${right}`
+        : `${edge.from} ${newOp} ${right}`;
+      const indent = lines[sourceLineIdx].match(/^(\s*)/)?.[1] ?? '';
+      lines[sourceLineIdx] = `${indent}${replacement}`;
+      return lines.join('\n');
+    }
+  }
   const idx = lines.findIndex((line) => linePattern.test(line));
   if (idx >= 0) {
-    lines[idx] = replacement;
+    const right = extractEdgeRightPart(lines[idx], edge) ?? edge.to;
+    const replacement = labeled
+      ? `${edge.from} ${newOp}|${edge.label}| ${right}`
+      : `${edge.from} ${newOp} ${right}`;
+    const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
+    lines[idx] = `${indent}${replacement}`;
     return lines.join('\n');
   }
   return source;

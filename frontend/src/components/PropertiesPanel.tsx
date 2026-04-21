@@ -372,6 +372,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         type: edge.type,
                       },
                       e.target.value,
+                      selectedEdgeIndex,
                     ),
                   )
                 }
@@ -394,6 +395,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         type: edge.type,
                       },
                       nextType,
+                      selectedEdgeIndex,
                     ),
                   );
                 }}
