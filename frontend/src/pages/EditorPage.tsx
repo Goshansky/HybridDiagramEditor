@@ -122,7 +122,8 @@ export const EditorPage: React.FC = () => {
   const theme = useAppSelector((state) => state.ui.theme);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const location = useLocation();
-  const routeDiagramId = (location.state as { diagramId?: number } | null)?.diagramId;
+  const routeState = (location.state as { diagramId?: number } | null) ?? null;
+  const routeDiagramId = routeState?.diagramId;
   const detectedDiagramType = useMemo(
     () => detectDiagramTypeFromSource(source),
     [source],

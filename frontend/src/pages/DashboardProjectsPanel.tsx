@@ -6,7 +6,14 @@ import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import { parseMermaidByType } from '../../parser';
 import { DiagramCanvas } from '../components/DiagramCanvas';
 
-import { deleteDiagram, listVersions, renameDiagram, type VersionDto } from '../services/diagramApi';
+import {
+  createDiagram,
+  deleteDiagram,
+  listVersions,
+  renameDiagram,
+  type DiagramType,
+  type VersionDto,
+} from '../services/diagramApi';
 import { listProjects } from '../services/projectApi';
 import {
   removeProject,
@@ -128,11 +135,40 @@ export const DashboardProjectsPanel: React.FC = () => {
     navigate('/', { state: { diagramId: id } });
   };
 
+  const onCreateNew = async (): Promise<void> => {
+    const entered = window.prompt('Название диаграммы', 'Новая диаграмма');
+    const name = entered?.trim();
+    if (!name) return;
+    const type: DiagramType = 'flowchart';
+    try {
+      const created = await createDiagram({
+        name,
+        type,
+        content: getTemplateByDiagramType(type),
+      });
+      dispatch(
+        upsertProject({
+          id: created.id,
+          name: created.name,
+          updatedAt: created.updated_at,
+          diagramType: created.diagram_type,
+          versionsCount: 1,
+        }),
+      );
+      onOpen(created.id, created.diagram_type);
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.detail ?? 'Не удалось создать диаграмму')
+        : 'Не удалось создать диаграмму';
+      setStatusMessage(message);
+    }
+  };
+
   return (
     <div style={{ color: '#111827' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h2 style={{ margin: 0, fontSize: 18 }}>Список проектов</h2>
-        <button style={buttonPrimaryStyle} onClick={() => navigate('/')}>
+        <button style={buttonPrimaryStyle} onClick={() => { void onCreateNew(); }}>
           Новая диаграмма
         </button>
       </div>
@@ -453,4 +489,40 @@ function getCurrentVersionLabel(versions: VersionDto[], selectedVersionId: numbe
   if (selected) return `v${selected.version_number}`;
   const latest = [...versions].sort((a, b) => b.version_number - a.version_number)[0];
   return latest ? `v${latest.version_number}` : 'Нет версий';
+}
+
+function getTemplateByDiagramType(diagramType: DiagramType): string {
+  if (diagramType === 'class') {
+    return `classDiagram
+  class User {
+    +id: int
+    +email: string
+    +login()
+  }
+  class Admin
+  User <|-- Admin`;
+  }
+  if (diagramType === 'sequence') {
+    return `sequenceDiagram
+  participant A as User
+  participant B as Service
+  A->>B: Request
+  B-->>A: Response`;
+  }
+  if (diagramType === 'er') {
+    return `erDiagram
+  USER {
+    int id
+    string email
+  }
+  ORDER {
+    int id
+    int user_id
+  }
+  USER ||--o{ ORDER : has`;
+  }
+  return `graph TD
+  A[Начало] --> B{Условие}
+  B -->|Да| C[Действие 1]
+  B -->|Нет| D[Действие 2]`;
 }
