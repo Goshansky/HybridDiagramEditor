@@ -276,8 +276,8 @@ export class Parser {
 
   private parseNodeCore(): ParsedNode {
     const idToken = this.consume('IDENT');
-    let label: string | undefined;
-    let shape: NodeShape | undefined;
+    let label: string | undefined = idToken.value ?? undefined;
+    let shape: NodeShape | undefined = 'rect';
     let className: string | undefined;
     let end = idToken.end;
 

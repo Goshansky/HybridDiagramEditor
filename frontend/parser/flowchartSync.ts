@@ -23,13 +23,30 @@ export function replaceNodeDefinition(
   shape: FlowNodeShape,
 ): string {
   const lines = source.split(/\r?\n/);
-  const nodePattern = new RegExp(
-    `\\b${escapeRegExp(nodeId)}\\s*(\\[[^\\]]*\\]|\\{[^}]*\\}|\\(\\([^)]*\\)\\)|\\(\\[[^\\]]*\\]\\)|\\[\\[[^\\]]*\\]\\]|\\[\\([^)]*\\)\\]|>[^\\]]*\\])`,
+  const shapeBody =
+    '(\\[[^\\]]*\\]|\\{[^}]*\\}|\\(\\([^)]*\\)\\)|\\(\\[[^\\]]*\\]\\)|\\[\\[[^\\]]*\\]\\]|\\[\\([^)]*\\)\\]|>[^\\]]*\\])';
+  const lineNodePattern = new RegExp(`^\\s*${escapeRegExp(nodeId)}\\s*${shapeBody}\\s*$`);
+  const bareNodePattern = new RegExp(`^\\s*${escapeRegExp(nodeId)}\\s*$`);
+  const shapeOnlyPattern = new RegExp(
+    `^\\s*(?:\\[\\s*${escapeRegExp(nodeId)}\\s*\\]|\\{\\s*${escapeRegExp(nodeId)}\\s*\\}|\\(\\(\\s*${escapeRegExp(nodeId)}\\s*\\)\\)|\\(\\[\\s*${escapeRegExp(nodeId)}\\s*\\]\\)|\\[\\[\\s*${escapeRegExp(nodeId)}\\s*\\]\\]|\\[\\(\\s*${escapeRegExp(nodeId)}\\s*\\)\\]|>\\s*${escapeRegExp(nodeId)}\\s*\\])\\s*$`,
   );
   const replacement = serializeNode(nodeId, label, shape);
-  const idx = lines.findIndex((line) => nodePattern.test(line));
+  const idx = lines.findIndex((line) => lineNodePattern.test(line));
   if (idx >= 0) {
-    lines[idx] = lines[idx].replace(nodePattern, replacement);
+    const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
+    lines[idx] = `${indent}${replacement}`;
+    return lines.join('\n');
+  }
+  const bareIdx = lines.findIndex((line) => bareNodePattern.test(line));
+  if (bareIdx >= 0) {
+    const indent = lines[bareIdx].match(/^(\s*)/)?.[1] ?? '';
+    lines[bareIdx] = `${indent}${replacement}`;
+    return lines.join('\n');
+  }
+  const shapeOnlyIdx = lines.findIndex((line) => shapeOnlyPattern.test(line));
+  if (shapeOnlyIdx >= 0) {
+    const indent = lines[shapeOnlyIdx].match(/^(\s*)/)?.[1] ?? '';
+    lines[shapeOnlyIdx] = `${indent}${replacement}`;
     return lines.join('\n');
   }
   return `${source.trimEnd()}\n  ${replacement}`;
@@ -44,15 +61,25 @@ export function replaceEdgeDefinition(
   const op = edge.type === 'line' ? '---' : '-->';
   const from = escapeRegExp(edge.from);
   const to = escapeRegExp(edge.to);
-  const linePattern = new RegExp(
+  const hasCurrentLabel = edge.label !== undefined && edge.label !== '';
+  const exactPattern = hasCurrentLabel
+    ? new RegExp(
+        `\\b${from}\\b\\s*${escapeRegExp(op)}\\|${escapeRegExp(edge.label ?? '')}\\|\\s*\\b${to}\\b`,
+      )
+    : new RegExp(`\\b${from}\\b\\s*${escapeRegExp(op)}\\s*\\b${to}\\b`);
+  const fallbackPattern = new RegExp(
     `\\b${from}\\b\\s*${escapeRegExp(op)}(?:\\|[^|]*\\|)?\\s*\\b${to}\\b`,
   );
   const replacement = newLabel
     ? `${edge.from} ${op}|${newLabel}| ${edge.to}`
     : `${edge.from} ${op} ${edge.to}`;
-  const idx = lines.findIndex((line) => linePattern.test(line));
+  let idx = lines.findIndex((line) => exactPattern.test(line));
+  if (idx < 0) {
+    idx = lines.findIndex((line) => fallbackPattern.test(line));
+  }
   if (idx >= 0) {
-    lines[idx] = replacement;
+    const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
+    lines[idx] = `${indent}${replacement}`;
     return lines.join('\n');
   }
   return `${source.trimEnd()}\n  ${replacement}`;

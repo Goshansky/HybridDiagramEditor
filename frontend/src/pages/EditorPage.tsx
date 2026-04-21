@@ -592,6 +592,7 @@ export const EditorPage: React.FC = () => {
       const pos = pendingNodePos ?? { x: 180, y: 140 };
       return upsertLayoutHint(withNode, nextId, pos.x, pos.y);
     });
+    dispatch(setSelectedNode(nextId));
     setShowAddNodeDialog(false);
     setPendingNodePos(null);
     setStatusMessage(`Добавлен узел "${nextId}"`);
@@ -627,10 +628,12 @@ export const EditorPage: React.FC = () => {
 
   const handleCreateEdge = (payload: { label: string }): void => {
     if (!edgeDraft) return;
+    const nextEdgeIndex = diagramModel?.edges.length ?? 0;
     const edgeLine = payload.label
       ? `${edgeDraft.from} -->|${payload.label}| ${edgeDraft.to}`
       : `${edgeDraft.from} --> ${edgeDraft.to}`;
     setSource((prev) => appendEdgeLine(prev, edgeLine));
+    dispatch(setSelectedEdge(nextEdgeIndex));
     setShowAddEdgeDialog(false);
     setEdgeDraft(null);
     setEdgePickActive(false);
@@ -640,8 +643,10 @@ export const EditorPage: React.FC = () => {
   const handleCreateEdgeByDrag = (from: string, to: string): void => {
     if (activeDiagramType !== 'flowchart') return;
     if (from === to) return;
+    const nextEdgeIndex = diagramModel?.edges.length ?? 0;
     const edgeLine = `${from} --> ${to}`;
     setSource((prev) => appendEdgeLine(prev, edgeLine));
+    dispatch(setSelectedEdge(nextEdgeIndex));
     setStatusMessage(`Добавлена связь ${from} -> ${to}`);
   };
 
@@ -1027,7 +1032,10 @@ export const EditorPage: React.FC = () => {
                 selectedEdgeIndex={selectedCanvasEdgeIndex}
                 onSelectNode={handleCanvasNodeSelect}
                 onSelectEdge={(idx) => {
-                  if (idx === null) return;
+                  if (idx === null) {
+                    dispatch(clearSelectedElement());
+                    return;
+                  }
                   dispatch(setSelectedEdge(idx));
                 }}
                 onNodeDoubleClick={(id) => {
@@ -1282,12 +1290,16 @@ function getTemplateByDiagramType(diagramType: DiagramType): string {
 }
 
 function detectDiagramTypeFromSource(source: string): DiagramType | null {
-  const firstLine = source.split(/\r?\n/)[0]?.trim().toLowerCase() ?? '';
-  if (!firstLine) return null;
-  if (firstLine.startsWith('classdiagram')) return 'class';
-  if (firstLine.startsWith('sequencediagram')) return 'sequence';
-  if (firstLine.startsWith('erdiagram')) return 'er';
-  if (firstLine.startsWith('flowchart') || firstLine.startsWith('graph')) return 'flowchart';
+  const lines = source.split(/\r?\n/);
+  const firstMeaningful = lines
+    .map((ln) => ln.trim())
+    .find((ln) => ln.length > 0 && !ln.startsWith('%%'));
+  const head = firstMeaningful?.toLowerCase() ?? '';
+  if (!head) return null;
+  if (head.startsWith('classdiagram')) return 'class';
+  if (head.startsWith('sequencediagram')) return 'sequence';
+  if (head.startsWith('erdiagram')) return 'er';
+  if (head.startsWith('flowchart') || head.startsWith('graph')) return 'flowchart';
   return null;
 }
 
@@ -1315,11 +1327,30 @@ function serializeNode(id: string, label: string, shape: FlowNodeShape): string 
 
 function replaceNodeDefinition(source: string, nodeId: string, label: string, shape: FlowNodeShape): string {
   const lines = source.split(/\r?\n/);
-  const nodePattern = new RegExp(`\\b${escapeRegExp(nodeId)}\\s*(\\[[^\\]]*\\]|\\{[^}]*\\}|\\(\\([^)]*\\)\\)|\\(\\[[^\\]]*\\]\\)|\\[\\[[^\\]]*\\]\\]|\\[\\([^)]*\\)\\]|>[^\\]]*\\])`);
+  const shapeBody =
+    '(\\[[^\\]]*\\]|\\{[^}]*\\}|\\(\\([^)]*\\)\\)|\\(\\[[^\\]]*\\]\\)|\\[\\[[^\\]]*\\]\\]|\\[\\([^)]*\\)\\]|>[^\\]]*\\])';
+  const lineNodePattern = new RegExp(`^\\s*${escapeRegExp(nodeId)}\\s*${shapeBody}\\s*$`);
+  const bareNodePattern = new RegExp(`^\\s*${escapeRegExp(nodeId)}\\s*$`);
+  const shapeOnlyPattern = new RegExp(
+    `^\\s*(?:\\[\\s*${escapeRegExp(nodeId)}\\s*\\]|\\{\\s*${escapeRegExp(nodeId)}\\s*\\}|\\(\\(\\s*${escapeRegExp(nodeId)}\\s*\\)\\)|\\(\\[\\s*${escapeRegExp(nodeId)}\\s*\\]\\)|\\[\\[\\s*${escapeRegExp(nodeId)}\\s*\\]\\]|\\[\\(\\s*${escapeRegExp(nodeId)}\\s*\\)\\]|>\\s*${escapeRegExp(nodeId)}\\s*\\])\\s*$`,
+  );
   const replacement = serializeNode(nodeId, label, shape);
-  const idx = lines.findIndex((line) => nodePattern.test(line));
+  const idx = lines.findIndex((line) => lineNodePattern.test(line));
   if (idx >= 0) {
-    lines[idx] = lines[idx].replace(nodePattern, replacement);
+    const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
+    lines[idx] = `${indent}${replacement}`;
+    return lines.join('\n');
+  }
+  const bareIdx = lines.findIndex((line) => bareNodePattern.test(line));
+  if (bareIdx >= 0) {
+    const indent = lines[bareIdx].match(/^(\s*)/)?.[1] ?? '';
+    lines[bareIdx] = `${indent}${replacement}`;
+    return lines.join('\n');
+  }
+  const shapeOnlyIdx = lines.findIndex((line) => shapeOnlyPattern.test(line));
+  if (shapeOnlyIdx >= 0) {
+    const indent = lines[shapeOnlyIdx].match(/^(\s*)/)?.[1] ?? '';
+    lines[shapeOnlyIdx] = `${indent}${replacement}`;
     return lines.join('\n');
   }
   return `${source.trimEnd()}\n  ${replacement}`;
@@ -1334,11 +1365,23 @@ function replaceEdgeDefinition(
   const op = edge.type === 'line' ? '---' : '-->';
   const from = escapeRegExp(edge.from);
   const to = escapeRegExp(edge.to);
-  const linePattern = new RegExp(`\\b${from}\\b\\s*${escapeRegExp(op)}(?:\\|[^|]*\\|)?\\s*\\b${to}\\b`);
+  const hasCurrentLabel = edge.label !== undefined && edge.label !== '';
+  const exactPattern = hasCurrentLabel
+    ? new RegExp(
+        `\\b${from}\\b\\s*${escapeRegExp(op)}\\|${escapeRegExp(edge.label ?? '')}\\|\\s*\\b${to}\\b`,
+      )
+    : new RegExp(`\\b${from}\\b\\s*${escapeRegExp(op)}\\s*\\b${to}\\b`);
+  const fallbackPattern = new RegExp(
+    `\\b${from}\\b\\s*${escapeRegExp(op)}(?:\\|[^|]*\\|)?\\s*\\b${to}\\b`,
+  );
   const replacement = newLabel ? `${edge.from} ${op}|${newLabel}| ${edge.to}` : `${edge.from} ${op} ${edge.to}`;
-  const idx = lines.findIndex((line) => linePattern.test(line));
+  let idx = lines.findIndex((line) => exactPattern.test(line));
+  if (idx < 0) {
+    idx = lines.findIndex((line) => fallbackPattern.test(line));
+  }
   if (idx >= 0) {
-    lines[idx] = replacement;
+    const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
+    lines[idx] = `${indent}${replacement}`;
     return lines.join('\n');
   }
   return `${source.trimEnd()}\n  ${replacement}`;

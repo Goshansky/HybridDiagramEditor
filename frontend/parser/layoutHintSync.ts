@@ -27,6 +27,7 @@ function extractHintBlock(lines: string[]): HintBlock | null {
     if (!commentBody.startsWith('{')) continue;
 
     let rawJson = commentBody;
+    let sawParseError = false;
     for (let j = i; j < lines.length; j += 1) {
       if (j > i) {
         const nextTrimmed = lines[j].trim();
@@ -40,8 +41,13 @@ function extractHintBlock(lines: string[]): HintBlock | null {
           return { startLine: i, endLine: j, json: parsed };
         }
       } catch {
+        sawParseError = true;
         // читаем дальше, пока JSON не станет валидным
       }
+    }
+    if (sawParseError) {
+      // eslint-disable-next-line no-console
+      console.warn('Invalid layout hint JSON, ignoring block', rawJson);
     }
   }
   return null;
