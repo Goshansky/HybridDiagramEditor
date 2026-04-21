@@ -59,52 +59,70 @@ export const DashboardProfilePanel: React.FC = () => {
 
   return (
     <div style={{ color: '#111827' }}>
-      <section style={cardStyle}>
-        <div style={rowStyle}>
-          <span style={keyStyle}>Email:</span>
-          <span>{authUser?.email ?? '...'}</span>
-        </div>
-        <div style={rowStyle}>
-          <span style={keyStyle}>Дата регистрации:</span>
-          <span>{authUser ? new Date(authUser.created_at).toLocaleString() : '...'}</span>
-        </div>
-      </section>
-      <UserStats />
+      <div style={topRowStyle}>
+        <section style={{ ...cardStyle, ...infoCardStyle }}>
+          <div style={rowStyle}>
+            <span style={keyStyle}>Email:</span>
+            <span>{authUser?.email ?? '...'}</span>
+          </div>
+          <div style={rowStyle}>
+            <span style={keyStyle}>Дата регистрации:</span>
+            <span>{authUser ? new Date(authUser.created_at).toLocaleString() : '...'}</span>
+          </div>
+        </section>
 
-      <section style={cardStyle}>
-        <h2 style={sectionTitleStyle}>Смена пароля</h2>
-        <form onSubmit={handleChangePassword} style={{ display: 'grid', gap: 10, maxWidth: 420 }}>
-          <input
-            type="password"
-            placeholder="Старый пароль"
-            value={oldPassword}
-            onChange={(event) => setOldPassword(event.target.value)}
-            minLength={6}
-            maxLength={72}
-            required
-            style={inputStyle}
-            autoComplete="current-password"
-          />
-          <input
-            type="password"
-            placeholder="Новый пароль"
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            minLength={6}
-            maxLength={72}
-            required
-            style={inputStyle}
-            autoComplete="new-password"
-          />
-          <button type="submit" disabled={loading} style={buttonStyle}>
-            {loading ? 'Сохраняем...' : 'Изменить пароль'}
-          </button>
-        </form>
-      </section>
+        <section style={{ ...cardStyle, ...passwordCardStyle }}>
+          <h2 style={sectionTitleStyle}>Смена пароля</h2>
+          <form onSubmit={handleChangePassword} style={{ display: 'grid', gap: 10 }}>
+            <input
+              type="password"
+              placeholder="Старый пароль"
+              value={oldPassword}
+              onChange={(event) => setOldPassword(event.target.value)}
+              minLength={6}
+              maxLength={72}
+              required
+              style={inputStyle}
+              autoComplete="current-password"
+            />
+            <input
+              type="password"
+              placeholder="Новый пароль"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              minLength={6}
+              maxLength={72}
+              required
+              style={inputStyle}
+              autoComplete="new-password"
+            />
+            <button type="submit" disabled={loading} style={buttonStyle}>
+              {loading ? 'Сохраняем...' : 'Изменить пароль'}
+            </button>
+          </form>
+        </section>
+      </div>
+
+      <UserStats />
 
       {statusMessage ? <div style={statusStyle}>{statusMessage}</div> : null}
     </div>
   );
+};
+
+const topRowStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 380px',
+  gap: 12,
+  alignItems: 'start',
+};
+
+const infoCardStyle: React.CSSProperties = {
+  minHeight: 112,
+};
+
+const passwordCardStyle: React.CSSProperties = {
+  minHeight: 112,
 };
 
 const cardStyle: React.CSSProperties = {
