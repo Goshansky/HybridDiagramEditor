@@ -65,7 +65,7 @@ const DialogShell: React.FC<DialogShellProps> = ({ title, children, onCancel }) 
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  background: 'rgba(2,6,23,0.6)',
+  background: 'rgba(15,23,42,0.28)',
   display: 'grid',
   placeItems: 'center',
   zIndex: 120,
@@ -73,18 +73,20 @@ const overlayStyle: React.CSSProperties = {
 
 const dialogStyle: React.CSSProperties = {
   minWidth: 360,
-  background: '#020617',
-  border: '1px solid #334155',
+  background: '#ffffff',
+  border: '1px solid #e5e7eb',
   borderRadius: 8,
   padding: 12,
   display: 'grid',
   gap: 8,
+  boxShadow: '0 14px 30px rgba(15,23,42,0.16)',
+  color: '#111827',
 };
 
 const inputStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  background: '#0f172a',
-  color: '#e5e7eb',
+  border: '1px solid #d1d5db',
+  background: '#ffffff',
+  color: '#111827',
   borderRadius: 6,
   padding: '8px 10px',
 };
@@ -99,9 +101,9 @@ const primaryStyle: React.CSSProperties = {
   cursor: 'pointer',
 };
 const secondaryStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  background: '#0f172a',
-  color: '#e5e7eb',
+  border: '1px solid #d1d5db',
+  background: '#ffffff',
+  color: '#374151',
   borderRadius: 6,
   padding: '8px 12px',
   cursor: 'pointer',
