@@ -1,6 +1,6 @@
 import type { DiagramModel } from './model';
 import type { NodeShape } from './ast';
-import { getLayoutHintDocument } from './layoutHintSync';
+import { formatLayoutHintBlock, getLayoutHintDocument } from './layoutHintSync';
 import { serializeEdgeLine, serializeNode } from './flowchartSync';
 
 function formatNodeStyle(styles: Record<string, string>): string | null {
@@ -64,6 +64,6 @@ export function generateMermaidFromModel(model: DiagramModel, source: string): s
     if (st) lines.push(`  style ${n.id} ${st}`);
   }
   const hintDoc = buildHintDocumentFromModel(model, source);
-  lines.push(`%% ${JSON.stringify(hintDoc)}`);
+  lines.push(...formatLayoutHintBlock(hintDoc));
   return lines.join('\n');
 }

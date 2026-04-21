@@ -1,6 +1,7 @@
 import type { DiagramModel, DiagramNodeModel } from './model';
 import { buildHintDocumentFromModel } from './generateMermaid';
 import { estimateErEntitySize, type EntityAttribute } from './erModel';
+import { formatLayoutHintBlock } from './layoutHintSync';
 
 function attrLine(a: EntityAttribute): string {
   return `${a.type} ${a.name}${a.keyType ? ` ${a.keyType}` : ''}`;
@@ -58,7 +59,7 @@ export function generateERDiagramMermaid(model: DiagramModel, source: string): s
 
   syncErNodeSizes(model);
   const hintDoc = buildHintDocumentFromModel(model, source);
-  lines.push(`%% ${JSON.stringify(hintDoc)}`);
+  lines.push(...formatLayoutHintBlock(hintDoc));
   return lines.join('\n');
 }
 

@@ -7,6 +7,7 @@ import type {
 } from './model';
 import { buildHintDocumentFromModel } from './generateMermaid';
 import { estimateClassBoxSize } from './classDiagram';
+import { formatLayoutHintBlock } from './layoutHintSync';
 
 function formatNodeStyle(styles: Record<string, string>): string | null {
   const parts: string[] = [];
@@ -141,6 +142,6 @@ export function generateClassDiagramMermaid(model: DiagramModel, source: string)
 
   syncClassNodeSizes(model);
   const hintDoc = buildHintDocumentFromModel(model, source);
-  lines.push(`%% ${JSON.stringify(hintDoc)}`);
+  lines.push(...formatLayoutHintBlock(hintDoc));
   return lines.join('\n');
 }

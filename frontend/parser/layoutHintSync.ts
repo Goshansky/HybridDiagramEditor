@@ -19,6 +19,41 @@ interface HintBlock {
   json: LayoutDocument;
 }
 
+function isPrimitiveJsonValue(v: unknown): v is string | number | boolean | null {
+  return v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+}
+
+function stringifyHintJson(value: unknown, indentLevel = 0): string {
+  const indent = '  '.repeat(indentLevel);
+  if (isPrimitiveJsonValue(value)) return JSON.stringify(value);
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    const parts = value.map((item) => `${'  '.repeat(indentLevel + 1)}${stringifyHintJson(item, indentLevel + 1)}`);
+    return `[\n${parts.join(',\n')}\n${indent}]`;
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) return '{}';
+    const canInline = entries.every(([, v]) => isPrimitiveJsonValue(v));
+    if (canInline) {
+      return `{${entries.map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`).join(', ')}}`;
+    }
+    const parts = entries.map(
+      ([k, v]) => `${'  '.repeat(indentLevel + 1)}${JSON.stringify(k)}: ${stringifyHintJson(v, indentLevel + 1)}`,
+    );
+    return `{\n${parts.join(',\n')}\n${indent}}`;
+  }
+
+  return JSON.stringify(String(value));
+}
+
+export function formatLayoutHintBlock(doc: LayoutDocument): string[] {
+  const pretty = stringifyHintJson(doc, 0);
+  return pretty.split('\n').map((line) => `%% ${line}`);
+}
+
 function extractHintBlock(lines: string[]): HintBlock | null {
   for (let i = 0; i < lines.length; i += 1) {
     const trimmed = lines[i].trim();
@@ -113,18 +148,18 @@ export function upsertLayoutHint(
   if (block) {
     const nextJson: LayoutDocument = { ...block.json };
     nextJson.layout = { ...(nextJson.layout ?? {}), [nodeId]: nextPoint };
-    const replacement = `%% ${JSON.stringify(nextJson)}`;
+    const replacement = formatLayoutHintBlock(nextJson);
     const nextLines = [
       ...lines.slice(0, block.startLine),
-      replacement,
+      ...replacement,
       ...lines.slice(block.endLine + 1),
     ];
     return nextLines.join('\n');
   }
 
   const nextJson: LayoutDocument = { layout: { [nodeId]: nextPoint } };
-  const hintLine = `%% ${JSON.stringify(nextJson)}`;
-  return source.trimEnd() ? `${source.trimEnd()}\n${hintLine}` : hintLine;
+  const hintLines = formatLayoutHintBlock(nextJson);
+  return source.trimEnd() ? `${source.trimEnd()}\n${hintLines.join('\n')}` : hintLines.join('\n');
 }
 
 /** Обновить размеры узла в layout-хинте; якорь x/y — текущая позиция на холсте. */
@@ -154,12 +189,12 @@ export function upsertSequenceParticipantOrder(source: string, orderedIds: strin
   if (block) {
     const nextJson: LayoutDocument = { ...block.json };
     nextJson.sequenceParticipantOrder = orderedIds;
-    const replacement = `%% ${JSON.stringify(nextJson)}`;
-    return [...lines.slice(0, block.startLine), replacement, ...lines.slice(block.endLine + 1)].join('\n');
+    const replacement = formatLayoutHintBlock(nextJson);
+    return [...lines.slice(0, block.startLine), ...replacement, ...lines.slice(block.endLine + 1)].join('\n');
   }
   const nextJson: LayoutDocument = { sequenceParticipantOrder: orderedIds };
-  const hintLine = `%% ${JSON.stringify(nextJson)}`;
-  return source.trimEnd() ? `${source.trimEnd()}\n${hintLine}` : hintLine;
+  const hintLines = formatLayoutHintBlock(nextJson);
+  return source.trimEnd() ? `${source.trimEnd()}\n${hintLines.join('\n')}` : hintLines.join('\n');
 }
 
 /** Стили ребра по индексу в `model.edges` — хранятся в JSON-хинте рядом с layout. */
@@ -193,10 +228,10 @@ export function upsertEdgeStyleInHint(
       ...(nextJson.edgeStyles ?? {}),
       [key]: nextEdge,
     };
-    const replacement = `%% ${JSON.stringify(nextJson)}`;
+    const replacement = formatLayoutHintBlock(nextJson);
     const nextLines = [
       ...lines.slice(0, block.startLine),
-      replacement,
+      ...replacement,
       ...lines.slice(block.endLine + 1),
     ];
     return nextLines.join('\n');
@@ -206,8 +241,8 @@ export function upsertEdgeStyleInHint(
     layout: {},
     edgeStyles: { [key]: nextEdge },
   };
-  const hintLine = `%% ${JSON.stringify(nextJson)}`;
-  return source.trimEnd() ? `${source.trimEnd()}\n${hintLine}` : hintLine;
+  const hintLines = formatLayoutHintBlock(nextJson);
+  return source.trimEnd() ? `${source.trimEnd()}\n${hintLines.join('\n')}` : hintLines.join('\n');
 }
 
 /**
@@ -258,10 +293,10 @@ export function pruneLayoutHintAfterDeletion(
     return nextLines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
   }
 
-  const replacement = `%% ${JSON.stringify(nextJson)}`;
+  const replacement = formatLayoutHintBlock(nextJson);
   const nextLines = [
     ...lines.slice(0, block.startLine),
-    replacement,
+    ...replacement,
     ...lines.slice(block.endLine + 1),
   ];
   return nextLines.join('\n');
