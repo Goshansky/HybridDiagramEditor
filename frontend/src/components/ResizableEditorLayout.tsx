@@ -68,7 +68,7 @@ export const ResizableEditorLayout: React.FC<ResizableEditorLayoutProps> = ({
       ) : null}
       <Panel
         id="code"
-        defaultSize={showSidebar ? (showProperties ? '28%' : '32%') : (showProperties ? '42%' : '45%')}
+        defaultSize={showSidebar ? '28%' : '42%'}
         minSize="14%"
         style={{ minWidth: 200, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       >
