@@ -8,6 +8,7 @@ import type {
   DiagramNodeModel,
 } from './model';
 import { extractLayoutHints } from './layoutHints';
+import { getLayoutHintDocument } from './layoutHintSync';
 import { applyClassDiagramLayout } from '../src/services/layoutService';
 
 const ID = '[A-Za-z_][\\w~]*';
@@ -280,6 +281,7 @@ function mergeClassBox(into: ClassBoxModel, from: ClassBoxModel): void {
 
 export function parseClassDiagram(source: string, useAutoLayout = true): DiagramModel {
   const layout = extractLayoutHints(source);
+  const hintDoc = getLayoutHintDocument(source);
   const rawLines = source.split(/\r?\n/);
   const lines: string[] = [];
   for (const ln of rawLines) {
@@ -487,6 +489,25 @@ export function parseClassDiagram(source: string, useAutoLayout = true): Diagram
     },
     classNotes: notes.length ? notes : undefined,
   };
+
+  if (hintDoc?.edgeStyles && typeof hintDoc.edgeStyles === 'object') {
+    for (const [k, styleObj] of Object.entries(hintDoc.edgeStyles)) {
+      const idx = Number.parseInt(k, 10);
+      if (!Number.isFinite(idx) || idx < 0) continue;
+      const edge = model.edges[idx];
+      if (!edge || !styleObj || typeof styleObj !== 'object') continue;
+      const style = styleObj as Record<string, unknown>;
+      if (typeof style.stroke === 'string') edge.styles.stroke = style.stroke;
+      if (typeof style['stroke-width'] === 'string') {
+        edge.styles['stroke-width'] = style['stroke-width'];
+      } else if (typeof style['stroke-width'] === 'number') {
+        edge.styles['stroke-width'] = `${style['stroke-width']}px`;
+      }
+      if (typeof style['stroke-dasharray'] === 'string') {
+        edge.styles['stroke-dasharray'] = style['stroke-dasharray'];
+      }
+    }
+  }
 
   applyClassDiagramLayout(model, useAutoLayout);
   return model;

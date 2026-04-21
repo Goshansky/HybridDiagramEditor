@@ -39,13 +39,7 @@ function parseStrokeWidth(styles: Record<string, string>): number {
   const raw = styles['stroke-width'] ?? styles.strokeWidth;
   if (!raw) return 2;
   const n = Number.parseFloat(String(raw).replace(/px/gi, '').trim());
-  return Number.isFinite(n) ? Math.min(10, Math.max(1, Math.round(n))) : 2;
-}
-
-function edgeDashMode(styles: Record<string, string>): 'solid' | 'dashed' {
-  const d = styles['stroke-dasharray'];
-  if (!d || d === 'none') return 'solid';
-  return 'dashed';
+  return Number.isFinite(n) ? Math.min(10, Math.max(0.5, n)) : 2;
 }
 
 function normalizeHex(input: string, fallback: string): string {
@@ -410,7 +404,6 @@ export const ClassDiagramPropertiesPanel: React.FC<ClassDiagramPropertiesPanelPr
     const edge = model.edges[selectedEdgeIndex]!;
     const stroke = normalizeHex(edge.styles?.stroke ?? '', '#4b5563');
     const sw = parseStrokeWidth(edge.styles ?? {});
-    const dash = edgeDashMode(edge.styles ?? {});
     const rel = (edge.classRelation ?? 'association') as ClassRelationKind;
 
     const updateEdge = (patch: Partial<DiagramEdgeModel>): void => {
@@ -537,18 +530,6 @@ export const ClassDiagramPropertiesPanel: React.FC<ClassDiagramPropertiesPanelPr
                   });
                 }}
               />
-            </label>
-            <label style={{ ...label, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <input
-                type="checkbox"
-                checked={dash === 'dashed'}
-                onChange={(e) =>
-                  updateEdgeStyles({
-                    'stroke-dasharray': e.target.checked ? '5 5' : '',
-                  })
-                }
-              />
-              Пунктир
             </label>
           </section>
         </div>

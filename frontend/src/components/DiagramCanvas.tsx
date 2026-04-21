@@ -137,26 +137,26 @@ function umlClassEdgePresentation(d: PositionedEdge): {
     return {
       dash: styleDash,
       markerStart: null,
-      markerEnd: d.type === 'arrow' ? 'url(#edge-arrowhead)' : null,
+      markerEnd: d.type === 'arrow' ? 'url(#association-arrow)' : null,
     };
   }
   switch (k) {
     case 'inheritance':
-      return { dash: styleDash, markerStart: null, markerEnd: 'url(#uml-inherit)' };
+      return { dash: styleDash, markerStart: null, markerEnd: 'url(#inheritance-arrow)' };
     case 'implementation':
-      return { dash: styleDash ?? '6 4', markerStart: null, markerEnd: 'url(#uml-inherit)' };
+      return { dash: styleDash ?? '6 4', markerStart: null, markerEnd: 'url(#inheritance-arrow)' };
     case 'composition':
-      return { dash: styleDash, markerStart: 'url(#uml-compose)', markerEnd: null };
+      return { dash: styleDash, markerStart: 'url(#composition-diamond-start)', markerEnd: null };
     case 'aggregation':
-      return { dash: styleDash, markerStart: 'url(#uml-aggregate)', markerEnd: null };
+      return { dash: styleDash, markerStart: 'url(#aggregation-diamond-start)', markerEnd: null };
     case 'association':
-      return { dash: styleDash, markerStart: null, markerEnd: 'url(#edge-arrowhead)' };
+      return { dash: styleDash, markerStart: null, markerEnd: 'url(#association-arrow)' };
     case 'dependency':
-      return { dash: styleDash ?? '6 4', markerStart: null, markerEnd: 'url(#edge-arrowhead)' };
+      return { dash: styleDash ?? '6 4', markerStart: null, markerEnd: 'url(#association-arrow)' };
     case 'bidirectional':
       return { dash: styleDash, markerStart: null, markerEnd: null };
     default:
-      return { dash: styleDash, markerStart: null, markerEnd: 'url(#edge-arrowhead)' };
+      return { dash: styleDash, markerStart: null, markerEnd: 'url(#association-arrow)' };
   }
 }
 
@@ -184,6 +184,8 @@ function paintClassBoxNode(
   const stroke = d.styles.stroke ?? '#334155';
   const swRaw = d.styles['stroke-width'];
   const sw = swRaw ? Number.parseFloat(String(swRaw).replace(/px/gi, '')) || 1.5 : 1.5;
+  const hasStereo = Boolean(cb.stereotype);
+  const headerH = hasStereo ? 34 : 24;
   g.insert('rect', 'circle.connect-port')
     .attr('x', -w / 2)
     .attr('y', -h / 2)
@@ -192,7 +194,6 @@ function paintClassBoxNode(
     .attr('fill', fill)
     .attr('stroke', stroke)
     .attr('stroke-width', sw);
-  const headerH = 24;
   g.insert('rect', 'circle.connect-port')
     .attr('x', -w / 2)
     .attr('y', -h / 2)
@@ -208,21 +209,21 @@ function paintClassBoxNode(
     .attr('y2', -h / 2 + headerH)
     .attr('stroke', stroke)
     .attr('stroke-width', 1);
-  let ty = -h / 2 + 16;
+  const nameY = -h / 2 + (hasStereo ? 24 : 16);
+  let ty = nameY;
   const italic = d.styles['font-style'] === 'italic';
   if (cb.stereotype) {
     g.insert('text', 'circle.connect-port')
       .attr('text-anchor', 'middle')
-      .attr('y', ty)
+      .attr('y', -h / 2 + 8)
       .style('font-size', '10px')
       .style('fill', '#64748b')
       .style('font-style', italic ? 'italic' : 'normal')
       .text(`«${cb.stereotype}»`);
-    ty += CLASS_MEMBER_LINE;
   }
   g.insert('text', 'circle.connect-port')
     .attr('text-anchor', 'middle')
-    .attr('y', ty)
+    .attr('y', nameY)
     .style('font-size', '13px')
     .style('font-weight', '600')
     .style('fill', d.styles.color ?? '#0f172a')
@@ -230,13 +231,14 @@ function paintClassBoxNode(
     .text(cb.name);
   ty = -h / 2 + headerH + 12;
   for (const f of cb.fields) {
+    const st = f.isStatic ? '$' : '';
     g.insert('text', 'circle.connect-port')
       .attr('x', -w / 2 + 6)
       .attr('y', ty)
       .style('font-size', '11px')
       .style('font-family', 'ui-monospace, Consolas, monospace')
       .style('fill', '#1e293b')
-      .text(`${f.visibility}${f.name}: ${f.type}`);
+      .text(`${f.visibility}${st}${f.name}: ${f.type}`);
     ty += CLASS_MEMBER_LINE;
   }
   if (cb.fields.length && cb.methods.length) {
@@ -586,33 +588,63 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
       defs
         .append('marker')
-        .attr('id', 'edge-arrowhead')
-        .attr('viewBox', '0 -5 10 10')
+        .attr('id', 'association-arrow')
+        .attr('viewBox', '0 0 10 10')
         .attr('refX', 10)
-        .attr('refY', 0)
-        .attr('markerWidth', 6)
-        .attr('markerHeight', 6)
+        .attr('refY', 5)
+        .attr('markerWidth', 8)
+        .attr('markerHeight', 8)
         .attr('orient', 'auto')
         .append('path')
-        .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', '#4b5563');
+        .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+        .attr('fill', 'context-stroke')
+        .attr('stroke', 'context-stroke')
+        .attr('stroke-width', 1.5);
 
-      const umlInherit = defs
+      defs
         .append('marker')
-        .attr('id', 'uml-inherit')
-        .attr('viewBox', '0 -6 12 12')
-        .attr('refX', 0)
-        .attr('refY', 0)
+        .attr('id', 'inheritance-arrow')
+        .attr('viewBox', '0 0 10 10')
+        .attr('refX', 10)
+        .attr('refY', 5)
+        .attr('markerWidth', 8)
+        .attr('markerHeight', 8)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+        .attr('fill', 'none')
+        .attr('stroke', 'context-stroke')
+        .attr('stroke-width', 1.5);
+
+      defs
+        .append('marker')
+        .attr('id', 'aggregation-diamond-start')
+        .attr('viewBox', '0 0 12 12')
+        .attr('refX', 2)
+        .attr('refY', 6)
         .attr('markerWidth', 10)
         .attr('markerHeight', 10)
-        .attr('orient', 'auto');
-      umlInherit.append('path').attr('d', 'M12,-6 L0,0 L12,6 Z').attr('fill', 'none').attr('stroke', '#4b5563');
+        .attr('orient', 'auto')
+        .append('polygon')
+        .attr('points', '6,0 12,6 6,12 0,6')
+        .attr('fill', 'none')
+        .attr('stroke', 'context-stroke')
+        .attr('stroke-width', 1.5);
 
-      const umlComp = defs.append('marker').attr('id', 'uml-compose').attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0).attr('markerWidth', 9).attr('markerHeight', 9).attr('orient', 'auto');
-      umlComp.append('path').attr('d', 'M0,-4 L8,0 L0,4 L-8,0 Z').attr('fill', '#4b5563').attr('stroke', '#4b5563');
-
-      const umlAgg = defs.append('marker').attr('id', 'uml-aggregate').attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0).attr('markerWidth', 9).attr('markerHeight', 9).attr('orient', 'auto');
-      umlAgg.append('path').attr('d', 'M0,-4 L8,0 L0,4 L-8,0 Z').attr('fill', '#fff').attr('stroke', '#4b5563');
+      defs
+        .append('marker')
+        .attr('id', 'composition-diamond-start')
+        .attr('viewBox', '0 0 12 12')
+        .attr('refX', 2)
+        .attr('refY', 6)
+        .attr('markerWidth', 10)
+        .attr('markerHeight', 10)
+        .attr('orient', 'auto')
+        .append('polygon')
+        .attr('points', '6,0 12,6 6,12 0,6')
+        .attr('fill', 'context-stroke')
+        .attr('stroke', 'context-stroke')
+        .attr('stroke-width', 1.5);
     }
 
     let edgesG = rootG.select<SVGGElement>('g.edges');
@@ -960,6 +992,22 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       .attr('dominant-baseline', 'central')
       .style('font-size', '12px')
       .style('fill', '#374151');
+    edgeEnter
+      .append('text')
+      .attr('class', 'class-mult-from')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .style('font-size', '10px')
+      .style('fill', '#475569')
+      .style('pointer-events', 'none');
+    edgeEnter
+      .append('text')
+      .attr('class', 'class-mult-to')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .style('font-size', '10px')
+      .style('fill', '#475569')
+      .style('pointer-events', 'none');
 
     edgeEnter
       .append('text')
@@ -1184,6 +1232,30 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         g.select<SVGTextElement>('text.edge-label')
           .attr('x', (x1 + x2) / 2)
           .attr('y', (y1 + y2) / 2 - 6);
+        if (d.classRelation) {
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = -dy / len;
+          const ny = dx / len;
+          const fromOff = 14;
+          const toOff = 14;
+          const fromX = x1 + (dx / len) * fromOff + nx * 10;
+          const fromY = y1 + (dy / len) * fromOff + ny * 10;
+          const toX = x2 - (dx / len) * toOff + nx * 10;
+          const toY = y2 - (dy / len) * toOff + ny * 10;
+          g.select<SVGTextElement>('text.class-mult-from')
+            .attr('x', fromX)
+            .attr('y', fromY)
+            .text(d.fromMultiplicity ?? '');
+          g.select<SVGTextElement>('text.class-mult-to')
+            .attr('x', toX)
+            .attr('y', toY)
+            .text(d.toMultiplicity ?? '');
+        } else {
+          g.select<SVGTextElement>('text.class-mult-from').text('');
+          g.select<SVGTextElement>('text.class-mult-to').text('');
+        }
       });
     };
 
@@ -1196,9 +1268,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         model.metadata.diagramType === 'er' ? null : umlClassEdgePresentation(d).markerStart,
       )
       .attr('stroke', (d) =>
-        selectedEdgeIndex === d.edgeIndex
-          ? '#4f46e5'
-          : (d.styles.stroke ?? '#4b5563'),
+        d.styles.stroke ?? (selectedEdgeIndex === d.edgeIndex ? '#4f46e5' : '#4b5563'),
       )
       .attr('stroke-width', (d) =>
         edgeLineStrokeWidthPx(d.styles, selectedEdgeIndex === d.edgeIndex),
