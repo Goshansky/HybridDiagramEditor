@@ -696,10 +696,12 @@ export const EditorPage: React.FC = () => {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        height: '100%',
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         width: '100%',
+        overflow: 'hidden',
         padding: 0,
         gap: '0',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',

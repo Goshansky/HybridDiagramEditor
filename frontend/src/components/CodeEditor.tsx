@@ -181,11 +181,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '16px', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, overflow: 'hidden', padding: '16px', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div
         style={{
           flex: 1,
-          minHeight: 280,
+          minHeight: 0,
           minWidth: 200,
           width: '100%',
           overflow: 'hidden',
