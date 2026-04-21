@@ -87,6 +87,7 @@ export const EditorPage: React.FC = () => {
   const [zoomType, setZoomType] = useState<'in' | 'out' | 'reset'>('reset');
   const [zoomPercent, setZoomPercent] = useState(100);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [lastChangeAt, setLastChangeAt] = useState<Date>(new Date());
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
   const [pendingNodePos, setPendingNodePos] = useState<{ x: number; y: number } | null>(null);
   const [showAddNodeDialog, setShowAddNodeDialog] = useState(false);
@@ -131,6 +132,10 @@ export const EditorPage: React.FC = () => {
     [source],
   );
   const activeDiagramType = detectedDiagramType ?? currentDiagramType;
+
+  useEffect(() => {
+    setLastChangeAt(new Date());
+  }, [source]);
 
   useEffect(() => {
     if (detectedDiagramType && detectedDiagramType !== currentDiagramType) {
@@ -1242,7 +1247,17 @@ export const EditorPage: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ color: '#4ade80' }}>● Подключено</span>
           <span style={{ color: '#6b7280' }}>|</span>
-          <span>Последнее сохранение: 2 минуты назад</span>
+          <span>
+            Последнее изменение:{' '}
+            {lastChangeAt.toLocaleString('ru-RU', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+            })}
+          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ color: '#9ca3af' }}>Версия: v1.2</span>
