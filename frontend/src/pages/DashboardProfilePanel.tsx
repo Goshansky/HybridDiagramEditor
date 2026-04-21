@@ -114,7 +114,7 @@ const topRowStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '1fr 380px',
   gap: 12,
-  alignItems: 'start',
+  alignItems: 'stretch',
 };
 
 const infoCardStyle: React.CSSProperties = {
