@@ -422,7 +422,10 @@ export const EditorPage: React.FC = () => {
         return;
       }
 
-      const updated = await updateDiagram(selectedDiagramId, { content: source });
+      const updated = await updateDiagram(selectedDiagramId, {
+        content: source,
+        diagram_type: detectDiagramTypeFromSource(source) ?? activeDiagramType,
+      });
       dispatch(
         upsertDiagram({
           id: updated.id,
@@ -498,6 +501,7 @@ export const EditorPage: React.FC = () => {
     try {
       const updated = await updateDiagram(selectedDiagramId, {
         content: selected.content,
+        diagram_type: selected.diagramType,
       });
       setSource(updated.content);
       dispatch(enableAutoLayout());
