@@ -20,15 +20,18 @@ Hybrid Diagram Editor — гибридный редактор диаграмм �
     title: 'Поддерживаемые типы диаграмм',
     markdown: `
 - \`flowchart\` — блок-схемы с узлами/ветвлениями;
-- \`class\` — диаграммы классов и связей;
-- \`sequence\` — сценарии взаимодействий между участниками;
-- \`er\` — ER-диаграммы для сущностей и отношений БД.
+- \`classDiagram\` — диаграммы классов, полей/методов и UML-связей;
+- \`sequenceDiagram\` — сценарии взаимодействий между участниками;
+- \`erDiagram\` — ER-диаграммы для сущностей и связей с кардинальностями.
+
+Тип диаграммы определяется автоматически по первой значимой строке кода
+(\`flowchart/graph\`, \`classDiagram\`, \`sequenceDiagram\`, \`erDiagram\`).
 `,
   },
   {
-    title: 'Синтаксис Mermaid',
+    title: 'Примеры диаграмм',
     markdown: `
-### Базовый пример
+### Flowchart
 \`\`\`mermaid
 graph TD
   A[Начало] --> B{Условие}
@@ -36,31 +39,78 @@ graph TD
   B -->|Нет| D[Действие 2]
 \`\`\`
 
-### Стили и subgraph
+### Class Diagram
 \`\`\`mermaid
-flowchart TD
-  subgraph Frontend [Frontend]
-    UI[UI модуль]
-    Parser[Parser]
-  end
-
-  UI -.->|Событие| Parser
-  style Frontend fill:#eef6ff,stroke:#3b82f6,stroke-dasharray: 5 5
+classDiagram
+  class User {
+    +int id
+    +string email
+    +login(): void
+  }
+  class Admin {
+    +string role
+  }
+  User <|-- Admin
+  User "1" --> "0..*" Project : owns
 \`\`\`
+
+### Sequence Diagram
+\`\`\`mermaid
+sequenceDiagram
+  participant U as User
+  participant API as Backend
+  U->>API: GET /projects
+  API-->>U: 200 OK
+\`\`\`
+
+### ER Diagram
+\`\`\`mermaid
+erDiagram
+  CUSTOMER {
+    int id PK
+    string name
+    string email UK
+  }
+  ORDER {
+    int id PK
+    date created_at
+    decimal total
+  }
+  CUSTOMER ||--o{ ORDER : places
+\`\`\`
+`,
+  },
+  {
+    title: 'Редактирование на холсте',
+    markdown: `
+- перетаскивание узлов/сущностей обновляет layout-хинты в коде;
+- для \`flowchart\`, \`classDiagram\`, \`erDiagram\` доступны кнопки **Добавить узел** и **Добавить связь**;
+- для \`flowchart\`, \`classDiagram\`, \`erDiagram\` работает удаление выделенного узла/связи клавишей **Delete**;
+- для \`sequenceDiagram\` перетаскивается порядок участников (колонок).
+
+Для \`flowchart\` также доступно создание связи перетаскиванием из порта узла.
 `,
   },
   {
     title: 'Layout-хинты',
     markdown: `
-Layout-хинты нужны, чтобы **зафиксировать ручную компоновку** узлов.
+Layout-хинты фиксируют ручную компоновку и стили рёбер. Они сохраняются в комментариях \`%%\` рядом с кодом диаграммы.
 
-Они хранятся в комментарии формата:
+Формат многострочный:
 
 \`\`\`text
-%% { "layout": { "A": { "x": 100, "y": 50 }, "B": { "x": 250, "y": 150 } } }
+%% {
+%%   "layout": {
+%%     "A": {"x": 240, "y": 140, "width": 110, "height": 46},
+%%     "B": {"x": 420, "y": 140, "width": 110, "height": 46}
+%%   },
+%%   "edgeStyles": {
+%%     "0": {"stroke": "#4b5563", "stroke-width": "2px"}
+%%   }
+%% }
 \`\`\`
 
-Когда двигаешь узлы вручную, редактор обновляет эту структуру автоматически.
+Парсер поддерживает многострочные JSON-хинты.
 `,
   },
   {
@@ -98,7 +148,7 @@ Layout-хинты нужны, чтобы **зафиксировать ручну
     title: 'Быстрый старт',
     markdown: `
 1. Создай новый проект в личном кабинете или в редакторе.
-2. Выбери тип диаграммы (\`flowchart/class/sequence/er\`).
+2. Введи код диаграммы, начиная с ключевого слова типа (\`flowchart\`, \`classDiagram\`, \`sequenceDiagram\`, \`erDiagram\`).
 3. Введи Mermaid-код в левой панели.
 4. При необходимости подправь расположение узлов мышкой.
 5. Сохрани версию и экспортируй результат в SVG/PNG.
