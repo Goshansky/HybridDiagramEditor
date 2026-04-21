@@ -418,7 +418,9 @@ const previewBoxStyle: React.CSSProperties = {
   border: '2px solid var(--border-soft)',
   borderRadius: 14,
   background: '#f8fafc',
+  height: 220,
   minHeight: 220,
+  maxHeight: 220,
   overflow: 'hidden',
 };
 
