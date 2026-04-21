@@ -9,7 +9,6 @@ import {
   Link2,
   Maximize,
   Moon,
-  MoreVertical,
   Plus,
   Sun,
   ZoomIn,
@@ -123,6 +122,7 @@ export const EditorPage: React.FC = () => {
   const gridSnap = useAppSelector((state) => state.ui.gridSnap);
   const theme = useAppSelector((state) => state.ui.theme);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canvasShellRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const routeState = (location.state as { diagramId?: number } | null) ?? null;
   const routeDiagramId = routeState?.diagramId;
@@ -690,6 +690,21 @@ export const EditorPage: React.FC = () => {
   const layoutHintsInSource =
     isDagreLayoutDiagramType(activeDiagramType) && sourceHasLayoutPositionHints(source);
 
+  const toggleCanvasFullscreen = async (): Promise<void> => {
+    const el = canvasShellRef.current;
+    if (!el) return;
+    try {
+      if (document.fullscreenElement === el) {
+        await document.exitFullscreen();
+        return;
+      }
+      await el.requestFullscreen();
+      triggerZoom('reset');
+    } catch {
+      setStatusMessage('Не удалось переключить полноэкранный режим');
+    }
+  };
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Delete') return;
@@ -958,6 +973,7 @@ export const EditorPage: React.FC = () => {
           }
           canvas={
         <div
+          ref={canvasShellRef}
           style={{
             flex: 1,
             minHeight: 0,
@@ -993,7 +1009,13 @@ export const EditorPage: React.FC = () => {
                 <button style={canvasIconButtonStyle} onClick={() => triggerZoom('in')} title="Увеличить">
                   <ZoomIn size={16} color="#4b5563" />
                 </button>
-                <button style={canvasIconButtonStyle} onClick={() => triggerZoom('reset')} title="Вписать в экран">
+                <button
+                  style={canvasIconButtonStyle}
+                  onClick={() => {
+                    void toggleCanvasFullscreen();
+                  }}
+                  title="Полноэкранный режим"
+                >
                   <Maximize size={16} color="#4b5563" />
                 </button>
               </div>
@@ -1030,9 +1052,6 @@ export const EditorPage: React.FC = () => {
                 </button>
                 <button style={canvasIconButtonStyle} onClick={beginAddEdge} title="Добавить ребро">
                   <Link2 size={16} color="#4b5563" />
-                </button>
-                <button style={canvasIconButtonStyle} title="Дополнительно">
-                  <MoreVertical size={16} color="#4b5563" />
                 </button>
               </div>
             </div>
@@ -1157,6 +1176,41 @@ export const EditorPage: React.FC = () => {
               <span>Автосинхронизация: Код ↔ Диаграмма</span>
             </div>
           </div>
+          {showAddNodeDialog ? (
+            <AddNodeDialog
+              onCancel={() => {
+                setShowAddNodeDialog(false);
+                setPendingNodePos(null);
+              }}
+              onSubmit={handleCreateNode}
+            />
+          ) : null}
+          {showAddEdgeDialog ? (
+            <AddEdgeDialog
+              onCancel={() => {
+                setShowAddEdgeDialog(false);
+                setEdgeDraft(null);
+                setEdgePickActive(false);
+                setEdgeAddModeFrom(null);
+              }}
+              onSubmit={handleCreateEdge}
+            />
+          ) : null}
+          {editingNodeId ? (
+            <NodeEditor
+              initialLabel={findNodeLabel(diagramModel?.nodes ?? [], editingNodeId) ?? editingNodeId}
+              initialShape={(findNodeShape(diagramModel?.nodes ?? [], editingNodeId) ?? 'rect') as FlowNodeShape}
+              onCancel={() => setEditingNodeId(null)}
+              onSubmit={handleNodeEditSave}
+            />
+          ) : null}
+          {editingEdge ? (
+            <EdgeEditor
+              initialLabel={editingEdge.label ?? ''}
+              onCancel={() => setEditingEdge(null)}
+              onSubmit={handleEdgeEditSave}
+            />
+          ) : null}
         </div>
           }
           properties={
@@ -1194,41 +1248,6 @@ export const EditorPage: React.FC = () => {
           <span style={{ color: '#9ca3af' }}>Версия: v1.2</span>
         </div>
       </div>
-      {showAddNodeDialog ? (
-        <AddNodeDialog
-          onCancel={() => {
-            setShowAddNodeDialog(false);
-            setPendingNodePos(null);
-          }}
-          onSubmit={handleCreateNode}
-        />
-      ) : null}
-      {showAddEdgeDialog ? (
-        <AddEdgeDialog
-          onCancel={() => {
-            setShowAddEdgeDialog(false);
-            setEdgeDraft(null);
-            setEdgePickActive(false);
-            setEdgeAddModeFrom(null);
-          }}
-          onSubmit={handleCreateEdge}
-        />
-      ) : null}
-      {editingNodeId ? (
-        <NodeEditor
-          initialLabel={findNodeLabel(diagramModel?.nodes ?? [], editingNodeId) ?? editingNodeId}
-          initialShape={(findNodeShape(diagramModel?.nodes ?? [], editingNodeId) ?? 'rect') as FlowNodeShape}
-          onCancel={() => setEditingNodeId(null)}
-          onSubmit={handleNodeEditSave}
-        />
-      ) : null}
-      {editingEdge ? (
-        <EdgeEditor
-          initialLabel={editingEdge.label ?? ''}
-          onCancel={() => setEditingEdge(null)}
-          onSubmit={handleEdgeEditSave}
-        />
-      ) : null}
     </div>
   );
 };
