@@ -6,14 +6,12 @@ import { Register } from './components/Auth/Register';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { Dashboard } from './pages/Dashboard';
 import { EditorPage } from './pages/EditorPage';
-import { useAppSelector } from './store';
 
 export const App: React.FC = () => {
-  const theme = useAppSelector((state) => state.ui.theme);
-
   useEffect(() => {
-    document.body.setAttribute('data-theme', theme);
-  }, [theme]);
+    // Глобальная тема отключена: dark/light применяется только к CodeEditor.
+    document.body.removeAttribute('data-theme');
+  }, []);
 
   return (
     <Routes>
