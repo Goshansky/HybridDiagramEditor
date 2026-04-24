@@ -19,8 +19,9 @@ export function estimateClassBoxSize(cb: ClassBoxModel): { width: number; height
   const PAD = 8;
   const HEADER = 22;
   const stereoH = cb.stereotype ? LINE : 0;
-  const sep = cb.fields.length && cb.methods.length ? 4 : 0;
-  const bodyLines = cb.fields.length + cb.methods.length;
+  const methodOnlySpacer = cb.fields.length === 0 && cb.methods.length > 0 ? 1 : 0;
+  const sep = cb.methods.length > 0 ? 4 : 0;
+  const bodyLines = cb.fields.length + cb.methods.length + methodOnlySpacer;
   const h =
     PAD * 2 +
     HEADER +

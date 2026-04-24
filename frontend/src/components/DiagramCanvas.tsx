@@ -241,7 +241,11 @@ function paintClassBoxNode(
       .text(`${f.visibility}${st}${f.name}: ${f.type}`);
     ty += CLASS_MEMBER_LINE;
   }
-  if (cb.fields.length && cb.methods.length) {
+  if (cb.fields.length === 0 && cb.methods.length > 0) {
+    // В классе без полей оставляем пустую "секцию полей", чтобы методы не прилипали к шапке.
+    ty += CLASS_MEMBER_LINE;
+  }
+  if (cb.methods.length > 0) {
     ty += 2;
     g.insert('line', 'circle.connect-port')
       .attr('x1', -w / 2)
