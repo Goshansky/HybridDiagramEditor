@@ -137,6 +137,33 @@ function resolveCenterX(
 
 type ParticipantDragDatum = { id: string; index: number };
 
+function ensureSequenceArrowMarker(
+  seqG: d3.Selection<SVGGElement, unknown, null, undefined>,
+): void {
+  const svg = seqG.node()?.ownerSVGElement;
+  if (!svg) return;
+  const svgSel = d3.select(svg);
+  let defs = svgSel.select<SVGDefsElement>('defs.diagram-defs');
+  if (defs.empty()) {
+    defs = svgSel.append('defs').attr('class', 'diagram-defs');
+  }
+  if (!defs.select<SVGMarkerElement>('#sequence-arrowhead').empty()) return;
+  defs
+    .append('marker')
+    .attr('id', 'sequence-arrowhead')
+    .attr('viewBox', '0 0 10 10')
+    .attr('refX', 10)
+    .attr('refY', 5)
+    .attr('markerWidth', 7)
+    .attr('markerHeight', 7)
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+    .attr('fill', '#334155')
+    .attr('stroke', '#334155')
+    .attr('stroke-width', 1.2);
+}
+
 export function renderSequenceDiagram(
   seqG: d3.Selection<SVGGElement, unknown, null, undefined>,
   data: SequenceDiagramData,
@@ -149,6 +176,7 @@ export function renderSequenceDiagram(
   },
 ): number {
   seqG.selectAll('*').remove();
+  ensureSequenceArrowMarker(seqG);
 
   const flat: FlatItem[] = [];
   flattenStatements(data.statements, 0, flat);
@@ -447,18 +475,32 @@ export function renderSequenceDiagram(
       }
 
       if (m.from === m.to) {
-        const loopR = 18;
-        const mid = x1;
-        const arc = `M ${mid - 40} ${yy} A ${loopR} ${loopR} 0 1 1 ${mid + 40} ${yy}`;
+        const loopW = 42;
+        const loopH = 26;
+        const startX = x1;
+        const startY = yy;
+        const endX = x1;
+        const endY = yy + loopH;
+        const loopPath = `M ${startX} ${startY} L ${startX + loopW} ${startY} L ${startX + loopW} ${endY} L ${endX} ${endY}`;
         const showHead = useArrowhead(m.arrow) && !useCross(m.arrow);
         seqG
           .append('path')
-          .attr('d', arc)
+          .attr('d', loopPath)
           .attr('fill', 'none')
           .attr('stroke', '#334155')
           .attr('stroke-width', 1.5)
-          .attr('marker-end', showHead ? 'url(#edge-arrowhead)' : null)
+          .attr('marker-end', showHead ? 'url(#sequence-arrowhead)' : null)
           .attr('stroke-dasharray', arrowDashArray(m.arrow));
+        if (useCross(m.arrow)) {
+          seqG
+            .append('path')
+            .attr(
+              'd',
+              `M ${endX - 4} ${endY - 4} L ${endX + 4} ${endY + 4} M ${endX + 4} ${endY - 4} L ${endX - 4} ${endY + 4}`,
+            )
+            .attr('stroke', '#334155')
+            .attr('stroke-width', 1.5);
+        }
       } else {
         const showArrowHead = useArrowhead(m.arrow) && !useCross(m.arrow);
         seqG
@@ -470,7 +512,7 @@ export function renderSequenceDiagram(
           .attr('stroke', '#334155')
           .attr('stroke-width', 1.5)
           .attr('stroke-dasharray', arrowDashArray(m.arrow))
-          .attr('marker-end', showArrowHead ? 'url(#edge-arrowhead)' : null);
+          .attr('marker-end', showArrowHead ? 'url(#sequence-arrowhead)' : null);
 
         if (useCross(m.arrow)) {
           const endX = x2 > x1 ? x2 - 6 : x2 + 6;
@@ -487,7 +529,7 @@ export function renderSequenceDiagram(
 
       seqG
         .append('text')
-        .attr('x', (x1 + x2) / 2)
+        .attr('x', m.from === m.to ? x1 + 20 : (x1 + x2) / 2)
         .attr('y', labelY)
         .attr('text-anchor', 'middle')
         .style('font-size', '11px')
