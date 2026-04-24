@@ -207,7 +207,7 @@ export function renderSequenceDiagram(
       continue;
     }
     if (item.kind === 'ftr') {
-      y += 6;
+      y += 14;
       continue;
     }
     if (item.kind === 'msg') {
@@ -311,7 +311,7 @@ export function renderSequenceDiagram(
       .style('cursor', options.onParticipantReorder ? 'grab' : 'default');
 
     pg.append('rect')
-      .attr('x', 0)
+      .attr('x', 4)
       .attr('y', 0)
       .attr('width', COL_W - 8)
       .attr('height', HEADER_H - 4)
@@ -321,7 +321,7 @@ export function renderSequenceDiagram(
       .attr('stroke-width', sw);
 
     pg.append('text')
-      .attr('x', (COL_W - 8) / 2)
+      .attr('x', COL_W / 2)
       .attr('y', HEADER_H / 2)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
@@ -332,8 +332,8 @@ export function renderSequenceDiagram(
       .text(p.label.length > 22 ? `${p.label.slice(0, 22)}…` : p.label);
 
     pg.append('line')
-      .attr('x1', (COL_W - 8) / 2)
-      .attr('x2', (COL_W - 8) / 2)
+      .attr('x1', COL_W / 2)
+      .attr('x2', COL_W / 2)
       .attr('y1', HEADER_H)
       .attr('y2', lineY2Local)
       .attr('stroke', '#64748b')
@@ -364,9 +364,9 @@ export function renderSequenceDiagram(
             d3.select(this).style('cursor', 'grab');
             onDrag?.(false);
             const centerAbs =
-              xBase + (COL_W - 8) / 2 + dragAcc.dx;
+              xBase + COL_W / 2 + dragAcc.dx;
             let newIdx = Math.round(
-              (centerAbs - LEFT_MARGIN - (COL_W - 8) / 2) / COL_W,
+              (centerAbs - LEFT_MARGIN - COL_W / 2) / COL_W,
             );
             newIdx = Math.max(0, Math.min(orderedIds.length - 1, newIdx));
             const next = [...orderedIds];
@@ -382,6 +382,8 @@ export function renderSequenceDiagram(
 
   /** LIFO стек открытых Y по участнику (активации). */
   const actStack = new Map<string, number[]>();
+  const lastIncomingY = new Map<string, number>();
+  const lastOutgoingY = new Map<string, number>();
   const pushAct = (who: string, openY: number): void => {
     const a = actStack.get(who) ?? [];
     a.push(openY);
@@ -475,6 +477,8 @@ export function renderSequenceDiagram(
       }
 
       if (m.from === m.to) {
+        lastIncomingY.set(m.to, yy);
+        lastOutgoingY.set(m.from, yy);
         const loopW = 42;
         const loopH = 26;
         const startX = x1;
@@ -502,6 +506,8 @@ export function renderSequenceDiagram(
             .attr('stroke-width', 1.5);
         }
       } else {
+        lastOutgoingY.set(m.from, yy);
+        lastIncomingY.set(m.to, yy);
         const showArrowHead = useArrowhead(m.arrow) && !useCross(m.arrow);
         seqG
           .append('line')
@@ -598,8 +604,12 @@ export function renderSequenceDiagram(
       const pid = item.who;
       const xi = resolveCenterX(pid, data.participants, cx) - 5;
       if (item.on) {
-        pushAct(pid, yy);
+        // Для отдельного `activate X` привязываем старт к последней входящей стрелке в X.
+        const openY = lastIncomingY.get(pid) ?? yy;
+        pushAct(pid, openY);
       } else {
+        // Для отдельного `deactivate X` привязываем конец к последней исходящей стрелке из X.
+        const closeY = lastOutgoingY.get(pid) ?? yy;
         const oy = popAct(pid);
         if (oy !== undefined) {
           seqG
@@ -607,7 +617,7 @@ export function renderSequenceDiagram(
             .attr('x', xi)
             .attr('y', oy)
             .attr('width', 10)
-            .attr('height', Math.max(8, yy - oy))
+            .attr('height', Math.max(8, closeY - oy))
             .attr('fill', 'rgba(79, 70, 229, 0.2)')
             .attr('stroke', '#4f46e5')
             .attr('stroke-width', 1);
