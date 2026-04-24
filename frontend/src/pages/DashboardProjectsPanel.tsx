@@ -273,7 +273,7 @@ export const DashboardProjectsPanel: React.FC = () => {
                 <div style={previewBoxStyle}>
                   <ProjectPreview
                     projectType={project.diagramType}
-                    content={resolvePreviewContent(
+                    version={resolvePreviewVersion(
                       versionsByProject[project.id] ?? [],
                       selectedVersionByProject[project.id],
                     )}
@@ -447,25 +447,33 @@ const statusStyle: React.CSSProperties = {
   fontSize: 13,
 };
 
-function resolvePreviewContent(versions: VersionDto[], selectedVersionId: number | undefined): string {
-  if (!versions.length) return '';
+function resolvePreviewVersion(
+  versions: VersionDto[],
+  selectedVersionId: number | undefined,
+): VersionDto | null {
+  if (!versions.length) return null;
   const selected = versions.find((v) => v.id === selectedVersionId);
-  if (selected) return selected.content;
-  return [...versions].sort((a, b) => b.version_number - a.version_number)[0].content;
+  if (selected) return selected;
+  return [...versions].sort((a, b) => b.version_number - a.version_number)[0] ?? null;
 }
 
 const ProjectPreview: React.FC<{
   projectType: 'flowchart' | 'class' | 'sequence' | 'er';
-  content: string;
-}> = ({ projectType, content }) => {
+  version: VersionDto | null;
+}> = ({ projectType, version }) => {
+  const content = version?.content ?? '';
+  const effectiveType = React.useMemo(
+    () => detectDiagramTypeFromSource(content) ?? version?.diagram_type ?? projectType,
+    [content, projectType, version?.diagram_type],
+  );
   const previewModel = React.useMemo(() => {
     if (!content.trim()) return null;
     try {
-      return parseMermaidByType(content, projectType, true);
+      return parseMermaidByType(content, effectiveType, true);
     } catch {
       return null;
     }
-  }, [content, projectType]);
+  }, [content, effectiveType]);
 
   if (!content.trim()) {
     return <div style={previewFallbackStyle}>Пустая версия</div>;
@@ -491,6 +499,20 @@ function getCurrentVersionLabel(versions: VersionDto[], selectedVersionId: numbe
   if (selected) return `v${selected.version_number}`;
   const latest = [...versions].sort((a, b) => b.version_number - a.version_number)[0];
   return latest ? `v${latest.version_number}` : 'Нет версий';
+}
+
+function detectDiagramTypeFromSource(source: string): DiagramType | null {
+  const lines = source.split(/\r?\n/);
+  const firstMeaningful = lines
+    .map((ln) => ln.trim())
+    .find((ln) => ln.length > 0 && !ln.startsWith('%%'));
+  const head = firstMeaningful?.toLowerCase() ?? '';
+  if (!head) return null;
+  if (head.startsWith('classdiagram')) return 'class';
+  if (head.startsWith('sequencediagram')) return 'sequence';
+  if (head.startsWith('erdiagram')) return 'er';
+  if (head.startsWith('flowchart') || head.startsWith('graph')) return 'flowchart';
+  return null;
 }
 
 function getTemplateByDiagramType(diagramType: DiagramType): string {
