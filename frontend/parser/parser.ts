@@ -144,7 +144,8 @@ export class Parser {
       if (this.match('EOF')) break;
 
       if (this.isBareSubgraphEnd()) {
-        this.consume('IDENT');
+        if (this.check('IDENT')) this.consume('IDENT');
+        else this.consume('SEQ_KW');
         this.consumeLineRemainder();
         this.subgraphDepth -= 1;
         return out;
@@ -171,7 +172,7 @@ export class Parser {
 
   private isBareSubgraphEnd(): boolean {
     if (this.subgraphDepth < 1) return false;
-    if (!this.check('IDENT')) return false;
+    if (!this.check('IDENT') && !this.check('SEQ_KW')) return false;
     const v = (this.peek().value ?? '').toLowerCase();
     if (v !== 'end') return false;
     const next = this.tokens[this.current + 1];
